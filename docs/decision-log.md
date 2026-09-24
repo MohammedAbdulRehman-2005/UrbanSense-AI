@@ -199,36 +199,36 @@ Under R4 §14.3, backend event ingestion is strictly idempotent. When an event w
 
 ---
 
-## DECISION-018: GNSS Accuracy Semantic Guard
+## DECISION-018: GNSS Accuracy Semantic Guard — GPS Quality vs FOV Validity Separation
 
 **Status:** ADOPTED / PROTOTYPE GUARD  
-**Milestone:** 2.1  
-**Question:** How should the Opportunity Evaluator handle a GNSS sensor reading where `fix_quality > 0` but `accuracy_m is None`?  
-**Impact:** Geo-spatial reliability of opportunities and negative evidence calculation.  
+**Milestone:** 2.1 (refined in M2.1 micro-fix)  
+**Question:** How should the Opportunity Evaluator handle a GNSS sensor reading where `fix_quality > 0` but `accuracy_m is None`? Should GPS quality failure propagate to `fov_valid`?  
+**Impact:** Geo-spatial reliability of opportunities; semantic correctness of multi-dimensional quality scoring.  
 **Owner:** AI Systems & Edge Navigation Team.  
-**Hardened Semantic Rule (M2.1):**  
-A real GNSS fix without an accuracy estimate cannot be assumed to have high quality. In M2.1, when `accuracy_m is None`, `gps_quality_score` is explicitly assigned `0.0`, the opportunity is marked `INVALID`, and the reason `"GNSS accuracy unavailable"` is appended. Simulation mode continues to provide explicit simulated accuracy estimates (e.g., 3.5m). This is a prototype semantic guard to prevent silent quality fabrication.
+**Hardened Semantic Rule (M2.1 micro-fix):**  
+GPS quality and FOV validity are **independent sensing dimensions** and must not be conflated:
+- When `accuracy_m is None`: `gps_quality_score = 0.0`, Opportunity is `INVALID`, reason `"GNSS accuracy unavailable"` is appended.
+- **`fov_valid` is NOT set to `False` due to GPS accuracy unavailability alone.** `fov_valid` reflects camera field-of-view position assessment — a separate physical measurement from GPS accuracy reporting.
+- `fov_valid` is set to `False` only when: GNSS sensor data is entirely absent (`gnss is None`), or `fix_quality <= 0` (no GPS fix at all, meaning location itself is unknown).
+- A real fix with unreported accuracy means position is known but quality is uncertifiable — the Opportunity is INVALID for evidence-weight purposes, but the FOV assessment stands.
 
 ---
 
-## DECISION-019: Mathematical Performance Accounting Methodology
+## DECISION-019: Performance Instrumentation Discrepancy Reporting
 
 **Status:** ADOPTED  
-**Milestone:** 2.1  
-**Question:** How should perception pipeline performance be accounted for and reported to prevent arithmetic inconsistencies and misleading throughput claims?  
+**Milestone:** 2.1 (refined in M2.1 micro-fix)  
+**Question:** How should perception pipeline performance be accounted for, and what happens when measured component times sum to more than the measured total?  
 **Impact:** Performance transparency, benchmark credibility, profiling precision.  
 **Owner:** QA & AI Systems Architecture Team.  
-**Hardened Semantic Rule (M2.1):**  
-1. All component stages are measured using monotonic high-resolution wall-clock timers (`time.perf_counter()`):
-   - Frame acquisition (video decode + open)
-   - Optical quality evaluation
-   - Opportunity window evaluation
-   - Model inference
-   - Same-camera tracking
-   - Evidence cropping and event building
-2. Total execution time (`total_time_seconds`) is measured as the true end-to-end wall-clock duration of the run.
-3. Average end-to-end latency per frame is calculated as `(total_time_seconds * 1000.0) / frames_processed`.
-4. Processed throughput (`average_processed_fps`) is calculated as `1000.0 / avg_end_to_end_ms_per_frame` (frames processed per elapsed second). It is strictly reported as distinct from the source camera/video capture rate (e.g., 30 FPS).
-5. Residual overhead is calculated as `max(0.0, total_time_ms - sum(components))`, accounting for Python loop and scheduling overhead.
-6. The identity `sum(components) + residual == total` is guaranteed by construction and is explicitly documented as prototype CPU measurements, not embedded real-time performance.
+**Hardened Semantic Rule (M2.1 micro-fix):**  
+1. All component stages are measured using monotonic high-resolution wall-clock timers (`time.perf_counter()`): acquisition, quality eval, opportunity eval, inference, tracking, evidence/event building.
+2. Total execution time (`total_time_seconds`) is the true end-to-end wall-clock duration of the run.
+3. Average end-to-end latency per frame: `(total_time_seconds * 1000.0) / frames_processed`.
+4. Processed throughput (`average_processed_fps`): `1000.0 / avg_e2e_ms` — strictly distinct from source capture FPS.
+5. Residual overhead is **explicitly reported** as `discrepancy_ms = total_ms - sum(components)` (can be positive or negative):
+   - Positive: expected inter-step overhead (Python loop, scheduling). Normal operating condition.
+   - Negative (magnitude > 1 ms): indicates timer overlap or measurement error. A `WARNING` log is emitted describing the component sum, measured total, and magnitude of discrepancy. This surfaces instrumentation bugs rather than silently concealing them with `max(0, ...)`.
+6. The pipeline does NOT guarantee `sum(components) + residual == total` when timers overlap. The discrepancy IS the signal.
 

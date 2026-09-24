@@ -798,6 +798,8 @@ def test_gnss_accuracy_none_semantics():
 
     assert opp.gps_quality_score == 0.0, "Unreported GNSS accuracy must receive 0.0 quality score, not fabricated value"
     assert opp.validity_status == ValidityStatus.INVALID, "Opportunity without GNSS accuracy must be marked INVALID"
-    assert opp.fov_valid is False
+    # SEMANTIC SEPARATION (DECISION-018): GPS quality failure does NOT set fov_valid=False.
+    # fov_valid reflects camera FOV position — an independent sensing dimension from GPS accuracy.
+    assert opp.fov_valid is True, "fov_valid must not be False when GNSS accuracy is merely unreported"
     assert any("GNSS accuracy unavailable" in reason for reason in opp.invalid_reasons)
 

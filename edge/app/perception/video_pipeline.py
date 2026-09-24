@@ -469,8 +469,10 @@ class VideoPerceptionPipeline:
             self.metrics.average_fps = self.metrics.average_processed_fps
 
             # Residual overhead = total - sum(all measured components).
-            # By construction >= 0 (max() guard) and a small fraction in a
-            # healthy run; a large residual would indicate unmeasured work.
+            # A positive value is expected (inter-step glue, Python overhead).
+            # A negative value (component_sum > measured_total) indicates timer
+            # overlap or measurement error and is logged as a warning rather than
+            # silently clamped to zero (DECISION-019).
             sum_accounted_ms = (
                 self.metrics.acquisition_time_ms +
                 self.metrics.quality_eval_time_ms +
@@ -479,6 +481,16 @@ class VideoPerceptionPipeline:
                 self.metrics.tracking_time_ms +
                 self.metrics.evidence_and_event_time_ms
             )
-            self.metrics.overhead_time_ms = max(0.0, (total_time * 1000.0) - sum_accounted_ms)
+            discrepancy_ms = (total_time * 1000.0) - sum_accounted_ms
+            self.metrics.overhead_time_ms = discrepancy_ms
+            if discrepancy_ms < -1.0:  # 1 ms float-precision tolerance
+                logger.warning(
+                    "Instrumentation discrepancy: component sum (%.2f ms) exceeds "
+                    "measured total (%.2f ms) by %.2f ms — possible timer overlap "
+                    "or measurement error",
+                    sum_accounted_ms,
+                    total_time * 1000.0,
+                    abs(discrepancy_ms),
+                )
 
         return results

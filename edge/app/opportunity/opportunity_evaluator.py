@@ -161,12 +161,14 @@ class OpportunityEvaluator:
             invalid_reasons.append("No valid GPS fix")
             fov_valid = False
         elif gnss.accuracy_m is None:
-            # Fix reported but accuracy estimate unavailable -> quality uncertifiable.
-            # PROTOTYPE semantic guard (not a production threshold): an Opportunity
-            # must not be VALID when its GPS quality cannot be assessed, because
-            # later negative-evidence gates require usable GPS/time alignment.
+            # Fix reported but accuracy estimate unavailable -> GPS quality uncertifiable.
+            # SEMANTIC SEPARATION: GPS quality failure does NOT affect fov_valid.
+            # fov_valid reflects camera FOV position assessment, an independent
+            # sensing dimension from GPS accuracy reporting.
+            # The Opportunity becomes INVALID (gps_quality_score=0.0), but FOV
+            # itself is not invalidated by this GPS condition.
+            # DECISION-018: fov_valid remains True; invalid_reason is recorded.
             invalid_reasons.append("GNSS accuracy unavailable")
-            fov_valid = False
 
         if imu is None:
             invalid_reasons.append("Missing IMU sensor data")
