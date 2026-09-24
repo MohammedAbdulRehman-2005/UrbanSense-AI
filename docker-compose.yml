@@ -1,0 +1,130 @@
+services:
+
+  # ── PostgreSQL + PostGIS ──────────────────────────────────
+  # Persists the 8-state RoadTwin, spatial road-segment queries,
+  # traffic/incident/maintenance tables.
+  postgres:
+    image: postgis/postgis:17-3.5
+    container_name: urbansense-postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-urbansense}
+      POSTGRES_USER: ${POSTGRES_USER:-urbansense}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-urbansense_dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-urbansense}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ─────────────────────────────────────────────────
+  # Fusion Engine working state + Copilot query result cache.
+  redis:
+    image: redis:8-alpine
+    container_name: urbansense-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MinIO ─────────────────────────────────────────────────
+  # Object storage for evidence crops/clips and incident
+  # pre/post video buffers (EVENT.evidence_ref targets).
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: urbansense-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    env_file: .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-urbansense}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-urbansense_dev}
+    ports:
+      - "9000:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Mosquitto (MQTT broker) ──────────────────────────────
+  # Edge → backend event transport. Priority-routed: P0 events
+  # (incidents/hit-and-run) publish instantly; P3 buffered/batched.
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: urbansense-mosquitto
+    restart: unless-stopped
+    ports:
+      - "${MQTT_BROKER_PORT:-1883}:1883"
+      - "${MQTT_WS_PORT:-9002}:9002"
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+
+  # ── backend Backend (FastAPI) ────────────────────────────
+  # Ingestion, Fusion Engine, RoadTwin state machine, GIS/Copilot APIs.
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: urbansense-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-urbansense}:${POSTGRES_PASSWORD:-urbansense_dev}@postgres:5432/${POSTGRES_DB:-urbansense}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MQTT_BROKER_HOST: mosquitto
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+
+  # ── GIS Dashboard (React + TypeScript) ───────────────────
+  dashboard:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: urbansense-dashboard
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  mosquitto_data:
+  mosquitto_log:

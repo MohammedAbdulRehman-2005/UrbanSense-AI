@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Machine Learning models & artifacts
+*.pt
+*.pth
+*.onnx
+*.engine
+*.trt
+*.safetensors
+models/weights/
+edge/perception/checkpoints/
+
+# Datasets and generated/runtime data
+datasets/
+data/raw/
+data/processed/
+evidence/
+edge/evidence_buffer/
+backend/uploads/
+logs/
+*.log
+
+# Local infra volumes (if bind-mounted instead of named volumes)
+.docker/postgres_data/
+.docker/redis_data/
+.docker/minio_data/
+.docker/mosquitto/mosquitto.confdata/
+.docker/mosquitto/mosquitto.conflog/
+
+# Node / React dashboard
+node_modules/
+dist/
+build/
+.next/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.pid
+
+# Temporary
+*.tmp
+*.temp

@@ -1,0 +1,10 @@
+{
+  "name": "urbansense-dashboard",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0"
+  },
+  "dependencies": {
+    "vite": "^5.0.0"
+  }
+}
