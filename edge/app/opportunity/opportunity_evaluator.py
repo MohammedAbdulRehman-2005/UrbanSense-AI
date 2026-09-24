@@ -98,14 +98,28 @@ class OpportunityEvaluator:
         target_id: Optional[str] = None,
         edge_road_segment_hint: Optional[str] = None,
         trace_id: Optional[str] = None,
+        quality_signals: Optional[object] = None,  # QualitySignals from ObservationQualityEvaluator
     ) -> ObservationOpportunity:
         """
         Evaluate a sensing context and return an ObservationOpportunity.
-
-        In Milestone 1, all scores are deterministic stubs.
-        PROTOTYPE / SIMULATED.
+        Uses measured frame quality signals when provided, otherwise defaults to configured stubs.
         """
-        scores = self._scores
+        scores = dict(self._scores)
+
+        # Incorporate actual optical signals if provided
+        if quality_signals is not None:
+            if hasattr(quality_signals, "visibility_score"):
+                scores["visibility_score"] = quality_signals.visibility_score
+            if hasattr(quality_signals, "illumination_score"):
+                scores["illumination_score"] = quality_signals.illumination_score
+            if hasattr(quality_signals, "blur_score"):
+                scores["blur_score"] = quality_signals.blur_score
+            if hasattr(quality_signals, "occlusion_score"):
+                scores["occlusion_score"] = quality_signals.occlusion_score
+
+        # Incorporate actual GNSS fix quality if provided
+        if gnss is not None and gnss.accuracy_m is not None:
+            scores["gps_quality_score"] = round(min(1.0, max(0.0, 1.0 - (gnss.accuracy_m / 10.0))), 4)
 
         # PROTOTYPE: simple mean for composite score
         # DECISION_REQUIRED: production scoring should use domain-validated weighting

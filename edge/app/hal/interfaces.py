@@ -47,16 +47,18 @@ class IMUReading:
 class CameraFrame:
     """
     Represents a single camera frame reference.
-    In Milestone 1, this is a deterministic simulated stub.
-    Real implementation would carry actual pixel data or a buffer reference.
+    In Milestone 1, this was a deterministic simulated stub.
+    In Milestone 2, it carries image data (e.g., numpy ndarray) when available.
     """
     frame_id: str
     camera_id: str
     timestamp: datetime
     width: int
     height: int
-    simulated: bool = True    # Always True in Milestone 1
-    data_ref: Optional[str] = None   # Buffer/file reference (future)
+    simulated: bool = True           # True in M1 simulation; False for real/recorded frames
+    data_ref: Optional[str] = None   # Buffer/file reference
+    image: Optional[object] = None   # Raw frame array (e.g. numpy.ndarray)
+    frame_index: int = 0             # Monotonic frame index in stream
 
 
 class GNSSProvider(ABC):

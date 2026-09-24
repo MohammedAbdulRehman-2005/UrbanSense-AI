@@ -75,3 +75,58 @@
 **Question:** What identity provider and RBAC scheme is used? JWT with internal IdP, OAuth2, Keycloak?  
 **Impact:** API security for all Milestone 2+ endpoints.  
 **Owner:** Security + product team.
+
+---
+
+## DECISION-008: Pothole Detection Model Architecture
+
+**Status:** PROPOSED  
+**Milestone:** 2  
+**Question:** Which deep learning model architecture (YOLOv8-nano, RT-DETR, custom MobileNet-SSD) should be deployed to Edge devices for road surface distress detection?  
+**Impact:** Edge compute consumption, latency, and detection recall on embedded hardware.  
+**Owner:** CV / Perception team.  
+**Prototype behaviour:** Baseline morphological gradient depression detector (`BaselinePotholeDetector`) running behind the replaceable `BaseDetector` interface.
+
+---
+
+## DECISION-009: Vehicle Detection Model Architecture
+
+**Status:** PROPOSED  
+**Milestone:** 2  
+**Question:** Which multi-class object detection model should be selected for vehicle category identification (car, bus, truck, motorcycle, bicycle)?  
+**Impact:** Detection precision across varying weather/lighting, frame throughput.  
+**Owner:** CV / Perception team.  
+**Prototype behaviour:** Baseline roadway morphology and aspect-ratio classifier (`BaselineVehicleDetector`) running behind `BaseDetector`.
+
+---
+
+## DECISION-010: Object Tracking Engine Selection
+
+**Status:** PROPOSED  
+**Milestone:** 2  
+**Question:** Which tracking algorithm (ByteTrack, BoT-SORT, DeepSORT) should be integrated for high-speed same-camera object tracking?  
+**Impact:** Track ID persistence under occlusion; computational overhead.  
+**Owner:** CV / Perception team.  
+**Prototype behaviour:** Same-camera temporal IoU and centroid association tracker (`SameCameraTracker`) behind `BaseTracker`.
+
+---
+
+## DECISION-011: Physical Camera Calibration & Extrinsics
+
+**Status:** PROTOTYPE / ASSUMED  
+**Milestone:** 2  
+**Question:** What are the exact physical mounting heights, lens distortion coefficients, and camera angles across different transit bus chassis models?  
+**Impact:** Accuracy of inverse perspective mapping and real-world defect sizing in later milestones.  
+**Owner:** Hardware deployment team.  
+**Prototype behaviour:** Standardized assumed transit front mount: height 2.5m, pitch 0.0°, H-FOV 85.0°, V-FOV 54.0°.
+
+---
+
+## DECISION-012: Evidence Media Persistence Strategy
+
+**Status:** OPEN  
+**Milestone:** 2  
+**Question:** Should edge evidence crops be buffered on device local storage and synced lazily, or uploaded directly to MinIO / S3 on event generation?  
+**Impact:** Cellular bandwidth costs, upload latency, edge storage budget.  
+**Owner:** Systems architecture & infrastructure team.  
+**Prototype behaviour:** Stored in local evidence directory (`data/evidence/`) with stable `evidence://` URIs recorded in canonical event metadata.

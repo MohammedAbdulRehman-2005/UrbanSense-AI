@@ -70,6 +70,8 @@ class EventBuilder:
         edge_road_segment_hint: Optional[str] = None,
         trace_id: Optional[str] = None,
         gps_quality: Optional[float] = None,
+        evidence_ref: Optional[str] = None,
+        observation_quality: Optional[float] = None,
     ) -> CanonicalEvent:
         """
         Build a CanonicalEvent. Backend-owned fields are intentionally left unset.
@@ -128,9 +130,9 @@ class EventBuilder:
             event_type=event_type,
             observation_id=observation.observation_id,
             opportunity_id=opportunity.opportunity_id,
-            evidence_ref=None,
+            evidence_ref=evidence_ref,
             detector_confidence=observation.detector_confidence,
-            observation_quality=opportunity.opportunity_score,
+            observation_quality=observation_quality if observation_quality is not None else opportunity.opportunity_score,
             gps_quality=gps_quality,
             model_name=self.model_name,
             model_version=self.model_version,

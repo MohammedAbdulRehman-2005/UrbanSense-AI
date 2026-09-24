@@ -42,5 +42,3 @@ class ObservationModel(Base):
 
     # Relationships
     segment = relationship("RoadSegment", back_populates="observations")
-    event = relationship("EventModel", back_populates="observation", uselist=False)
-    # Note: Observation-Opportunity link is via EventModel.opportunity_id (order-independent)

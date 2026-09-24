@@ -1,4 +1,4 @@
-﻿"""
+"""
 UrbanSense AI — ObservationOpportunity ORM Model (Milestone 1)
 """
 from __future__ import annotations
@@ -43,6 +43,3 @@ class OpportunityModel(Base):
     trace_id = Column(String, nullable=False)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    events = relationship("EventModel", back_populates="opportunity")

@@ -51,9 +51,9 @@ class EventModel(Base):
 
     event_type = Column(String, nullable=False)
 
-    # Cross-references
-    observation_id = Column(String, ForeignKey("observations.observation_id"), nullable=True)
-    opportunity_id = Column(String, ForeignKey("observation_opportunities.opportunity_id"), nullable=True)
+    # Cross-references (order-independent references — not hard database constraints)
+    observation_id = Column(String, nullable=True, index=True)
+    opportunity_id = Column(String, nullable=True, index=True)
     evidence_ref = Column(String, nullable=True)
 
     # Quality dimensions — DISTINCT, never merge
@@ -73,5 +73,3 @@ class EventModel(Base):
 
     # Relationships
     segment = relationship("RoadSegment", back_populates="events", foreign_keys=[matched_road_segment_id])
-    observation = relationship("ObservationModel", back_populates="event", foreign_keys=[observation_id])
-    opportunity = relationship("OpportunityModel", back_populates="events", foreign_keys=[opportunity_id])

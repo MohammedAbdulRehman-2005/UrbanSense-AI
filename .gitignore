@@ -29,8 +29,9 @@ edge/perception/checkpoints/
 
 # Datasets and generated/runtime data
 datasets/
-data/raw/
-data/processed/
+data/
+*.mp4
+*.avi
 evidence/
 edge/evidence_buffer/
 backend/uploads/

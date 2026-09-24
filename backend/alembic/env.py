@@ -9,7 +9,7 @@ import sys
 import os
 
 # Ensure the project root is in sys.path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from backend.app.db.base import Base
 import backend.app.models  # noqa: F401 — import all models for metadata
