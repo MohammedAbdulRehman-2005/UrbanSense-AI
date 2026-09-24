@@ -4,6 +4,7 @@ from backend.app.models.observation import ObservationModel
 from backend.app.models.opportunity import OpportunityModel
 from backend.app.models.event import EventModel
 from backend.app.models.roadtwin import RoadTwinStateModel
+from backend.app.models.evidence import EvidenceModel
 
 __all__ = [
     "RoadSegment",
@@ -11,4 +12,5 @@ __all__ = [
     "OpportunityModel",
     "EventModel",
     "RoadTwinStateModel",
+    "EvidenceModel",
 ]

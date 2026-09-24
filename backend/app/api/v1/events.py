@@ -1,10 +1,11 @@
 """
-UrbanSense AI — POST /api/v1/events (Milestone 1)
-==================================================
-Receive → validate → idempotency check → persist → map-match → RoadTwin → respond
+UrbanSense AI — POST /api/v1/events (Milestone 1 + Milestone 3)
+==============================================================
+Receive → validate → idempotency check → persist → map-match → RoadTwin → FusionEngine → respond
 
 Idempotency: duplicate event_id returns "duplicate" status without creating a second record.
 Time semantics: event_timestamp is preserved as-is. ingestion_timestamp is set by backend.
+FusionEngine: evidence_weight is computed ONLY in backend/app/fusion/engine.py.
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from backend.app.schemas.event import EventIngest, EventIngestResponse
 from backend.app.models.event import EventModel
 from backend.app.services.map_matcher import match_location
 from backend.app.roadtwin.engine import upsert_roadtwin
+from backend.app.fusion.engine import process_event_evidence
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -108,7 +110,7 @@ def ingest_event(payload: EventIngest, db: Session = Depends(get_db)):
     db.add(event)
     db.flush()
 
-    # --- Minimal RoadTwin upsert (M1: OBSERVED state only for road defects) ---
+    # --- Minimal RoadTwin upsert + FusionEngine (M1 → M3 cooperative evidence) ---
     # Correction #7: Vehicle events (car, bus, truck, etc.) must NOT mutate road-defect RoadTwin state
     roadtwin_id = None
     if payload.event_type in ROAD_DEFECT_EVENT_TYPES and match.matched_road_segment_id:
@@ -120,10 +122,43 @@ def ingest_event(payload: EventIngest, db: Session = Depends(get_db)):
             f"state={rt.current_state} "
             f"event_id={payload.event_id}"
         )
+
+        # M3: FusionEngine — evidence classification, weight computation, aggregate update
+        # evidence_weight MUST NOT be computed anywhere except backend/app/fusion/engine.py
+        try:
+            evidence = process_event_evidence(
+                db=db,
+                event=event,
+                road_segment_id=match.matched_road_segment_id,
+            )
+            if evidence is not None:
+                logger.info(
+                    f"FusionEngine: evidence_id={evidence.evidence_id} "
+                    f"independence={evidence.independence_class} "
+                    f"weight={evidence.evidence_weight:.6f} "
+                    f"event_id={payload.event_id}"
+                )
+                # Re-read updated state after FusionEngine flushes
+                rt_updated = db.query(
+                    __import__("backend.app.models.roadtwin", fromlist=["RoadTwinStateModel"]).RoadTwinStateModel
+                ).filter_by(road_segment_id=match.matched_road_segment_id).first()
+                if rt_updated and rt_updated.current_state != rt.current_state:
+                    logger.info(
+                        f"RoadTwin state updated by FusionEngine: "
+                        f"{rt.current_state} -> {rt_updated.current_state} "
+                        f"segment={match.matched_road_segment_id}"
+                    )
+        except Exception as exc:
+            # FusionEngine failure must not abort the event ingestion (evidence is best-effort at M3)
+            logger.error(
+                f"FusionEngine error for event_id={payload.event_id}: {exc}",
+                exc_info=True,
+            )
     else:
         logger.info(
             f"Event {payload.event_id} (type={payload.event_type}) persisted without road defect RoadTwin mutation."
         )
+
 
     db.commit()
     logger.info(f"Event accepted: event_id={payload.event_id} trace_id={payload.trace_id}")
