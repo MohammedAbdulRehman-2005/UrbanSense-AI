@@ -75,48 +75,79 @@ def main() -> None:
     # ── Step 2: POST opportunity ───────────────────────────────────────────
     section("STEP 2: POST /api/v1/opportunities")
     opp_payload = opportunity.model_dump(mode="json")
-    with httpx.Client() as client:
+    with httpx.Client(timeout=10.0) as client:
+        # Check backend health first
+        try:
+            health = client.get(f"{BACKEND_URL}/health")
+            if health.status_code != 200:
+                print(f"  ERROR: Backend health failed with status {health.status_code}")
+                sys.exit(1)
+        except Exception as e:
+            print(f"  ERROR: Backend unreachable at {BACKEND_URL}: {e}")
+            sys.exit(1)
+
         resp = client.post(f"{BACKEND_URL}/api/v1/opportunities", json=opp_payload)
     print(f"  HTTP {resp.status_code}")
     print(f"  Response: {json.dumps(resp.json(), indent=2)}")
     if resp.status_code not in (200, 201):
-        print("  ERROR: Opportunity POST failed.")
+        print(f"  ERROR: Opportunity POST failed with status {resp.status_code}.")
         sys.exit(1)
 
     # ── Step 3: POST event ─────────────────────────────────────────────────
     section("STEP 3: POST /api/v1/events")
     event_payload = event.model_dump(mode="json")
-    with httpx.Client() as client:
+    with httpx.Client(timeout=10.0) as client:
         resp = client.post(f"{BACKEND_URL}/api/v1/events", json=event_payload)
     print(f"  HTTP {resp.status_code}")
     event_resp = resp.json()
     print(f"  Response: {json.dumps(event_resp, indent=2)}")
-    if resp.status_code not in (200, 201):
-        print("  ERROR: Event POST failed.")
+    if resp.status_code not in (200, 201) or event_resp.get("status") != "accepted":
+        print(f"  ERROR: Event POST failed: status={event_resp.get('status')}.")
         sys.exit(1)
 
     roadtwin_id = event_resp.get("roadtwin_id")
     matched_segment = event_resp.get("matched_road_segment_id")
+    if not matched_segment or not roadtwin_id:
+        print("  ERROR: Expected valid map match and roadtwin_id in response.")
+        sys.exit(1)
     print(f"\n  map_match: segment={matched_segment} (Backend-authoritative)")
     print(f"  roadtwin_id: {roadtwin_id}")
 
     # ── Step 4: Test idempotency ───────────────────────────────────────────
     section("STEP 4: Idempotency check (POST same event again)")
-    with httpx.Client() as client:
+    with httpx.Client(timeout=10.0) as client:
         resp2 = client.post(f"{BACKEND_URL}/api/v1/events", json=event_payload)
     resp2_data = resp2.json()
     print(f"  HTTP {resp2.status_code}")
     print(f"  status: {resp2_data.get('status')}")
-    assert resp2_data.get("status") == "duplicate", "FAIL: Expected duplicate status on re-submit"
+    if resp2.status_code != 200 or resp2_data.get("status") != "duplicate":
+        print(f"  ERROR: Idempotency failed: expected status 'duplicate', got '{resp2_data.get('status')}'")
+        sys.exit(1)
     print("  PASS: Idempotency verified — no duplicate created")
 
     # ── Step 5: GET RoadTwin ───────────────────────────────────────────────
     section("STEP 5: GET /api/v1/roadtwin (frontend data)")
-    with httpx.Client() as client:
+    with httpx.Client(timeout=10.0) as client:
         resp = client.get(f"{BACKEND_URL}/api/v1/roadtwin")
+    if resp.status_code != 200:
+        print(f"  ERROR: GET /api/v1/roadtwin failed with status {resp.status_code}")
+        sys.exit(1)
+
     roadtwins = resp.json()
     print(f"  HTTP {resp.status_code}")
     print(f"  RoadTwin count: {len(roadtwins)}")
+    if not isinstance(roadtwins, list) or len(roadtwins) == 0:
+        print("  ERROR: Expected at least one active RoadTwin.")
+        sys.exit(1)
+
+    target_rt = next((rt for rt in roadtwins if rt.get("roadtwin_id") == roadtwin_id), None)
+    if not target_rt:
+        print(f"  ERROR: Created RoadTwin {roadtwin_id} not found in GET response.")
+        sys.exit(1)
+    if target_rt.get("current_state") != "OBSERVED":
+        print(f"  ERROR: Expected state OBSERVED, got {target_rt.get('current_state')}")
+        sys.exit(1)
+
     for rt in roadtwins:
         print(f"\n  roadtwin_id         : {rt['roadtwin_id']}")
         print(f"  road_segment_id     : {rt['road_segment_id']}")

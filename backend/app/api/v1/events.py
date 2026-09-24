@@ -24,6 +24,14 @@ from backend.app.roadtwin.engine import upsert_roadtwin
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Correction #7: Types of events that mutate RoadTwin road-defect state
+ROAD_DEFECT_EVENT_TYPES = {
+    "pothole_observation",
+    "road_defect",
+    "surface_distress",
+    "pothole",
+}
+
 
 @router.post("/events", response_model=EventIngestResponse)
 def ingest_event(payload: EventIngest, db: Session = Depends(get_db)):
@@ -100,9 +108,10 @@ def ingest_event(payload: EventIngest, db: Session = Depends(get_db)):
     db.add(event)
     db.flush()
 
-    # --- Minimal RoadTwin upsert (M1: OBSERVED state only) ---
+    # --- Minimal RoadTwin upsert (M1: OBSERVED state only for road defects) ---
+    # Correction #7: Vehicle events (car, bus, truck, etc.) must NOT mutate road-defect RoadTwin state
     roadtwin_id = None
-    if match.matched_road_segment_id:
+    if payload.event_type in ROAD_DEFECT_EVENT_TYPES and match.matched_road_segment_id:
         rt = upsert_roadtwin(db, match.matched_road_segment_id, event)
         roadtwin_id = rt.roadtwin_id
         logger.info(
@@ -110,6 +119,10 @@ def ingest_event(payload: EventIngest, db: Session = Depends(get_db)):
             f"segment={match.matched_road_segment_id} "
             f"state={rt.current_state} "
             f"event_id={payload.event_id}"
+        )
+    else:
+        logger.info(
+            f"Event {payload.event_id} (type={payload.event_type}) persisted without road defect RoadTwin mutation."
         )
 
     db.commit()

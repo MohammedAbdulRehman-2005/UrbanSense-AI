@@ -47,12 +47,14 @@ class EventBuilder:
         camera_id: str,
         model_name: str,
         model_version: str,
+        deterministic: bool = False,
     ) -> None:
         self.bus_id = bus_id
         self.device_id = device_id
         self.camera_id = camera_id
         self.model_name = model_name
         self.model_version = model_version
+        self.deterministic = deterministic
         self._sequence = 0
 
     def build(
@@ -72,6 +74,7 @@ class EventBuilder:
         gps_quality: Optional[float] = None,
         evidence_ref: Optional[str] = None,
         observation_quality: Optional[float] = None,
+        event_id: Optional[str] = None,
     ) -> CanonicalEvent:
         """
         Build a CanonicalEvent. Backend-owned fields are intentionally left unset.
@@ -79,8 +82,16 @@ class EventBuilder:
         PROTOTYPE / SIMULATED in Milestone 1.
         """
         self._sequence += 1
-        event_id = str(uuid.uuid4())
-        _trace_id = trace_id or opportunity.trace_id or str(uuid.uuid4())
+        if event_id:
+            _event_id = event_id
+        elif self.deterministic:
+            _event_id = f"EVT-{self._sequence:06d}"
+        else:
+            _event_id = str(uuid.uuid4())
+
+        _trace_id = trace_id or opportunity.trace_id or (
+            f"TRACE-{self.bus_id}-{self._sequence:06d}" if self.deterministic else str(uuid.uuid4())
+        )
 
         location = Location(
             latitude=latitude,
@@ -94,7 +105,7 @@ class EventBuilder:
         # NOTE: ingestion_timestamp, matched_road_segment_id etc. are NOT included —
         # they are backend-owned and not known at build time.
         payload_for_hash = {
-            "event_id": event_id,
+            "event_id": _event_id,
             "bus_id": self.bus_id,
             "device_id": self.device_id,
             "camera_id": self.camera_id,
@@ -115,7 +126,7 @@ class EventBuilder:
         ).hexdigest()
 
         return CanonicalEvent(
-            event_id=event_id,
+            event_id=_event_id,
             schema_version="1.0",
             bus_id=self.bus_id,
             device_id=self.device_id,

@@ -62,12 +62,13 @@ class SensingPassSimulator:
     PROTOTYPE / SIMULATED.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, deterministic: bool = False) -> None:
+        self.deterministic = deterministic
         self.gnss = SimulatedGNSSProvider()
         self.imu = SimulatedIMUProvider()
         self.camera = SimulatedCameraProvider()
-        self.evaluator = OpportunityEvaluator(BUS_ID, DEVICE_ID, CAMERA_ID)
-        self.builder = EventBuilder(BUS_ID, DEVICE_ID, CAMERA_ID, MODEL_NAME, MODEL_VERSION)
+        self.evaluator = OpportunityEvaluator(BUS_ID, DEVICE_ID, CAMERA_ID, deterministic=deterministic)
+        self.builder = EventBuilder(BUS_ID, DEVICE_ID, CAMERA_ID, MODEL_NAME, MODEL_VERSION, deterministic=deterministic)
 
     def run(self) -> Tuple[str, Observation, ObservationOpportunity, CanonicalEvent]:
         """
@@ -76,16 +77,32 @@ class SensingPassSimulator:
         Returns:
             (sensing_pass_id, observation, opportunity, canonical_event)
         """
-        trace_id = str(uuid.uuid4())
+        if self.deterministic:
+            trace_id = "TRACE-BUS001-000001"
+            base_time = datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc)
+            window_start = base_time
+            window_end = base_time + timedelta(seconds=1)
+            event_ts = base_time
+            obs_id = "OBS-000001"
+            event_id = "EVT-000001"
+        else:
+            trace_id = str(uuid.uuid4())
+            window_start = datetime.now(timezone.utc)
+            window_end = window_start + timedelta(seconds=1)
+            obs_id = str(uuid.uuid4())
+            event_id = None
 
         # 1. Read sensors (all deterministic stubs)
         gnss = self.gnss.read()
         imu = self.imu.read()
         frame = self.camera.capture()
-
-        # 2. Define sensing window (1-second window around current time)
-        window_start = datetime.now(timezone.utc)
-        window_end = window_start + timedelta(seconds=1)
+        if self.deterministic:
+            gnss.timestamp = base_time
+            imu.timestamp = base_time
+            frame.timestamp = base_time
+            event_ts = base_time
+        else:
+            event_ts = gnss.timestamp
 
         # 3. Generate Opportunity
         opportunity = self.evaluator.evaluate(
@@ -104,11 +121,12 @@ class SensingPassSimulator:
 
         # 4. Generate Observation (simulated detection result)
         observation = Observation(
+            observation_id=obs_id,
             frame_id=frame.frame_id,
             bus_id=BUS_ID,
             device_id=DEVICE_ID,
             camera_id=CAMERA_ID,
-            timestamp=gnss.timestamp,
+            timestamp=event_ts,
             object_type="pothole",
             # SIMULATED: deterministic stub confidence value.
             # In real deployment this comes from YOLO/detector softmax.
@@ -130,7 +148,7 @@ class SensingPassSimulator:
         event = self.builder.build(
             observation=observation,
             opportunity=opportunity,
-            event_timestamp=gnss.timestamp,
+            event_timestamp=event_ts,
             latitude=gnss.latitude,
             longitude=gnss.longitude,
             altitude_m=gnss.altitude_m,
@@ -141,6 +159,7 @@ class SensingPassSimulator:
             edge_road_segment_hint=EDGE_ROAD_SEGMENT_HINT,
             trace_id=trace_id,
             gps_quality=gnss.accuracy_m / 10.0 if gnss.accuracy_m else None,
+            event_id=event_id,
         )
 
         return SENSING_PASS_ID, observation, opportunity, event

@@ -79,19 +79,22 @@ class OpportunityEvaluator:
         device_id: str,
         camera_id: str,
         scores: Optional[dict] = None,
+        deterministic: bool = False,
     ) -> None:
         self.bus_id = bus_id
         self.device_id = device_id
         self.camera_id = camera_id
         self._scores = scores or PROTOTYPE_SCORES
+        self.deterministic = deterministic
+        self._sequence = 0
 
     def evaluate(
         self,
         sensing_pass_id: str,
         window_start: datetime,
         window_end: datetime,
-        gnss: GNSSReading,
-        imu: IMUReading,
+        gnss: Optional[GNSSReading],
+        imu: Optional[IMUReading],
         frame: CameraFrame,
         target_scope: TargetScope = TargetScope.SEGMENT,
         target_type: str = "road_segment",
@@ -99,11 +102,13 @@ class OpportunityEvaluator:
         edge_road_segment_hint: Optional[str] = None,
         trace_id: Optional[str] = None,
         quality_signals: Optional[object] = None,  # QualitySignals from ObservationQualityEvaluator
+        opportunity_id: Optional[str] = None,
     ) -> ObservationOpportunity:
         """
         Evaluate a sensing context and return an ObservationOpportunity.
         Uses measured frame quality signals when provided, otherwise defaults to configured stubs.
         """
+        self._sequence += 1
         scores = dict(self._scores)
 
         # Incorporate actual optical signals if provided
@@ -120,6 +125,11 @@ class OpportunityEvaluator:
         # Incorporate actual GNSS fix quality if provided
         if gnss is not None and gnss.accuracy_m is not None:
             scores["gps_quality_score"] = round(min(1.0, max(0.0, 1.0 - (gnss.accuracy_m / 10.0))), 4)
+        elif gnss is None:
+            scores["gps_quality_score"] = 0.0
+
+        if imu is None:
+            scores["sensor_health_score"] = min(scores.get("sensor_health_score", 1.0), 0.5)
 
         # PROTOTYPE: simple mean for composite score
         # DECISION_REQUIRED: production scoring should use domain-validated weighting
@@ -139,9 +149,16 @@ class OpportunityEvaluator:
         invalid_reasons = []
         fov_valid = True
 
-        if not gnss.fix_quality > 0:
+        if gnss is None:
+            invalid_reasons.append("Missing GNSS sensor data")
+            fov_valid = False
+        elif not (gnss.fix_quality and gnss.fix_quality > 0):
             invalid_reasons.append("No valid GPS fix")
             fov_valid = False
+
+        if imu is None:
+            invalid_reasons.append("Missing IMU sensor data")
+
         if opportunity_score < PROTOTYPE_VALIDITY_THRESHOLD:
             invalid_reasons.append(
                 f"Opportunity score {opportunity_score} below threshold {PROTOTYPE_VALIDITY_THRESHOLD}"
@@ -149,8 +166,19 @@ class OpportunityEvaluator:
 
         validity_status = ValidityStatus.VALID if not invalid_reasons else ValidityStatus.INVALID
 
+        if opportunity_id:
+            _opp_id = opportunity_id
+        elif self.deterministic:
+            _opp_id = f"OPP-{self.bus_id}-{self._sequence:06d}"
+        else:
+            _opp_id = str(uuid.uuid4())
+
+        _trace_id = trace_id or (
+            f"TRACE-{self.bus_id}-{self._sequence:06d}" if self.deterministic else str(uuid.uuid4())
+        )
+
         return ObservationOpportunity(
-            opportunity_id=str(uuid.uuid4()),
+            opportunity_id=_opp_id,
             sensing_pass_id=sensing_pass_id,
             bus_id=self.bus_id,
             device_id=self.device_id,
@@ -174,5 +202,5 @@ class OpportunityEvaluator:
             validity_status=validity_status,
             invalid_reasons=invalid_reasons,
             coverage_fraction=scores["coverage_fraction"],
-            trace_id=trace_id or str(uuid.uuid4()),
+            trace_id=_trace_id,
         )

@@ -130,3 +130,39 @@
 **Impact:** Cellular bandwidth costs, upload latency, edge storage budget.  
 **Owner:** Systems architecture & infrastructure team.  
 **Prototype behaviour:** Stored in local evidence directory (`data/evidence/`) with stable `evidence://` URIs recorded in canonical event metadata.
+
+---
+
+## DECISION-013: Heuristic Detector Confidence Calibration vs Probability Scoring
+
+**Status:** DOCUMENTED / OPEN  
+**Milestone:** 2.1  
+**Question:** How should raw detector confidence values from computer vision models (classical heuristic contour scores in prototype, Softmax probabilities in deep models) be calibrated into formal statistical likelihoods for evidence fusion?  
+**Impact:** Downstream sensor fusion in Milestone 3 must not mistake uncalibrated heuristics or raw Softmax overconfidence for calibrated truth probabilities.  
+**Owner:** AI/Perception team & Sensor Fusion team.  
+**Hardened Semantic Rule (M2.1):**  
+In Milestone 2 / 2.1, `detector_confidence` represents an **uncalibrated prototype detector score** derived from geometric contour features (aspect ratio, circularity, solidity). It is strictly NOT a Bayesian probability, truth confidence, or calibrated evidence weight. No downstream module in M2/M2.1 treats this score as a calibrated probability.
+
+---
+
+## DECISION-014: Opportunity Window Duration and Multi-Frame Aggregation Policy
+
+**Status:** PROTOTYPE / CONFIGURABLE  
+**Milestone:** 2.1  
+**Question:** What is the authoritative sensing window duration for grouping consecutive camera frames under an `ObservationOpportunity`?  
+**Impact:** Frame-to-opportunity cardinality, edge event generation rate, and database record volume.  
+**Owner:** Edge systems architecture team.  
+**Hardened Semantic Rule (M2.1):**  
+An `ObservationOpportunity` is a meaningful sensing window (default 1.0 second prototype window), NOT a 1:1 per-frame parent object. Multiple consecutive frames and detections within that window reference the same authoritative `opportunity_id`.
+
+---
+
+## DECISION-015: Remote Object Storage Synchronization (MinIO / S3)
+
+**Status:** OPEN  
+**Milestone:** 2.1  
+**Question:** At what frequency and protocol should edge evidence artifacts stored at `data/evidence/` with `evidence://local/...` references be synced to centralized MinIO/S3 object storage?  
+**Impact:** Edge retention policy, network upload queue management, and frontend media viewing latency.  
+**Owner:** Cloud Infrastructure team.  
+**Hardened Prototype Semantics (M2.1):**  
+Milestone 2.1 uses a local filesystem evidence store (`data/evidence/`) generating local URIs (`evidence://local/...`). Lineage is verified end-to-end (Observation → Event → Backend payload). Remote object synchronization to MinIO/S3 remains an open infrastructure integration.

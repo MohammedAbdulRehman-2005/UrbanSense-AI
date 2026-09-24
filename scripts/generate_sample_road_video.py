@@ -24,10 +24,16 @@ def generate_sample_road_video(
     width: int = 1280,
     height: int = 720,
     fps: float = 30.0,
+    seed: int = 42,
 ) -> str:
     """
-    Generate a synthetic road video file with roadway, moving vehicles, and potholes.
+    Generate a deterministic synthetic road test video fixture.
+    
+    PROTOTYPE TEST FIXTURE — NOT real recorded road footage.
+    Uses an explicit NumPy Generator (default_rng) with a configurable seed
+    to guarantee reproducible frame generation across runs.
     """
+    rng = np.random.default_rng(seed)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
@@ -51,8 +57,8 @@ def generate_sample_road_video(
         asphalt_color = (65, 65, 70)
         frame[horizon_y:, :] = asphalt_color
 
-        # Road texture noise
-        noise = np.random.randint(-8, 8, (height - horizon_y, width, 3), dtype=np.int16)
+        # Road texture noise (reproducible via explicit generator)
+        noise = rng.integers(-8, 8, (height - horizon_y, width, 3), dtype=np.int16)
         road_region = frame[horizon_y:, :].astype(np.int16) + noise
         frame[horizon_y:, :] = np.clip(road_region, 0, 255).astype(np.uint8)
 
