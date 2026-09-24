@@ -100,6 +100,11 @@ class FileCameraProvider(CameraProvider):
         """Return True if the video capture is active and ready."""
         return self._is_open and self._cap is not None and self._cap.isOpened()
 
+    @property
+    def fps(self) -> float:
+        """Reported source frame rate of the video (used for source-vs-processed FPS reporting)."""
+        return self._fps or 30.0
+
     def close(self) -> None:
         """Release video capture resources."""
         if self._cap is not None:

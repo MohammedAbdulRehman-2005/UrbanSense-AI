@@ -86,9 +86,17 @@ def main() -> None:
             print(f"  ERROR: Backend unreachable at {BACKEND_URL}: {e}")
             sys.exit(1)
 
-        resp = client.post(f"{BACKEND_URL}/api/v1/opportunities", json=opp_payload)
+        try:
+            resp = client.post(f"{BACKEND_URL}/api/v1/opportunities", json=opp_payload)
+        except Exception as e:
+            print(f"  ERROR: Opportunity POST raised a transport failure: {e}")
+            sys.exit(1)
     print(f"  HTTP {resp.status_code}")
-    print(f"  Response: {json.dumps(resp.json(), indent=2)}")
+    try:
+        print(f"  Response: {json.dumps(resp.json(), indent=2)}")
+    except Exception as e:
+        print(f"  ERROR: Opportunity POST returned an invalid (non-JSON) response: {e}")
+        sys.exit(1)
     if resp.status_code not in (200, 201):
         print(f"  ERROR: Opportunity POST failed with status {resp.status_code}.")
         sys.exit(1)
@@ -97,27 +105,62 @@ def main() -> None:
     section("STEP 3: POST /api/v1/events")
     event_payload = event.model_dump(mode="json")
     with httpx.Client(timeout=10.0) as client:
-        resp = client.post(f"{BACKEND_URL}/api/v1/events", json=event_payload)
+        try:
+            resp = client.post(f"{BACKEND_URL}/api/v1/events", json=event_payload)
+        except Exception as e:
+            print(f"  ERROR: Event POST raised a transport failure: {e}")
+            sys.exit(1)
     print(f"  HTTP {resp.status_code}")
-    event_resp = resp.json()
+    try:
+        event_resp = resp.json()
+    except Exception as e:
+        print(f"  ERROR: Event POST returned an invalid (non-JSON) response: {e}")
+        sys.exit(1)
     print(f"  Response: {json.dumps(event_resp, indent=2)}")
-    if resp.status_code not in (200, 201) or event_resp.get("status") != "accepted":
-        print(f"  ERROR: Event POST failed: status={event_resp.get('status')}.")
+
+    if resp.status_code not in (200, 201):
+        print(f"  ERROR: Event POST failed with status {resp.status_code}.")
         sys.exit(1)
 
-    roadtwin_id = event_resp.get("roadtwin_id")
+    event_status = event_resp.get("status")
     matched_segment = event_resp.get("matched_road_segment_id")
-    if not matched_segment or not roadtwin_id:
-        print("  ERROR: Expected valid map match and roadtwin_id in response.")
+    if event_status == "accepted":
+        fresh_ingest = True
+        roadtwin_id = event_resp.get("roadtwin_id")
+        if not matched_segment or not roadtwin_id:
+            print("  ERROR: Expected valid map match and roadtwin_id in response.")
+            sys.exit(1)
+    elif event_status == "duplicate":
+        # Deterministic re-run of the same simulated sensing pass (R4 §14.3 idempotency).
+        # This is a valid, healthy outcome — the backend correctly recognised the event
+        # and refused to create a duplicate authoritative record.
+        fresh_ingest = False
+        roadtwin_id = None  # resolved from the read model in Step 5
+        if not matched_segment:
+            print("  ERROR: Duplicate response missing matched_road_segment_id.")
+            sys.exit(1)
+        print("  NOTE: This deterministic sensing pass was already ingested (idempotent re-run).")
+    else:
+        print(f"  ERROR: Event POST failed: status={event_status}.")
         sys.exit(1)
+
     print(f"\n  map_match: segment={matched_segment} (Backend-authoritative)")
-    print(f"  roadtwin_id: {roadtwin_id}")
+    if roadtwin_id:
+        print(f"  roadtwin_id: {roadtwin_id}")
 
     # ── Step 4: Test idempotency ───────────────────────────────────────────
     section("STEP 4: Idempotency check (POST same event again)")
     with httpx.Client(timeout=10.0) as client:
-        resp2 = client.post(f"{BACKEND_URL}/api/v1/events", json=event_payload)
-    resp2_data = resp2.json()
+        try:
+            resp2 = client.post(f"{BACKEND_URL}/api/v1/events", json=event_payload)
+        except Exception as e:
+            print(f"  ERROR: Idempotency re-POST raised a transport failure: {e}")
+            sys.exit(1)
+    try:
+        resp2_data = resp2.json()
+    except Exception as e:
+        print(f"  ERROR: Idempotency re-POST returned an invalid (non-JSON) response: {e}")
+        sys.exit(1)
     print(f"  HTTP {resp2.status_code}")
     print(f"  status: {resp2_data.get('status')}")
     if resp2.status_code != 200 or resp2_data.get("status") != "duplicate":
@@ -128,21 +171,33 @@ def main() -> None:
     # ── Step 5: GET RoadTwin ───────────────────────────────────────────────
     section("STEP 5: GET /api/v1/roadtwin (frontend data)")
     with httpx.Client(timeout=10.0) as client:
-        resp = client.get(f"{BACKEND_URL}/api/v1/roadtwin")
+        try:
+            resp = client.get(f"{BACKEND_URL}/api/v1/roadtwin")
+        except Exception as e:
+            print(f"  ERROR: GET /api/v1/roadtwin raised a transport failure: {e}")
+            sys.exit(1)
     if resp.status_code != 200:
         print(f"  ERROR: GET /api/v1/roadtwin failed with status {resp.status_code}")
         sys.exit(1)
 
-    roadtwins = resp.json()
+    try:
+        roadtwins = resp.json()
+    except Exception as e:
+        print(f"  ERROR: GET /api/v1/roadtwin returned an invalid (non-JSON) response: {e}")
+        sys.exit(1)
     print(f"  HTTP {resp.status_code}")
     print(f"  RoadTwin count: {len(roadtwins)}")
     if not isinstance(roadtwins, list) or len(roadtwins) == 0:
         print("  ERROR: Expected at least one active RoadTwin.")
         sys.exit(1)
 
-    target_rt = next((rt for rt in roadtwins if rt.get("roadtwin_id") == roadtwin_id), None)
+    if roadtwin_id:
+        target_rt = next((rt for rt in roadtwins if rt.get("roadtwin_id") == roadtwin_id), None)
+    else:
+        # Idempotent re-run: resolve the RoadTwin via the authoritative matched segment.
+        target_rt = next((rt for rt in roadtwins if rt.get("road_segment_id") == matched_segment), None)
     if not target_rt:
-        print(f"  ERROR: Created RoadTwin {roadtwin_id} not found in GET response.")
+        print("  ERROR: RoadTwin for this sensing pass not found in GET response.")
         sys.exit(1)
     if target_rt.get("current_state") != "OBSERVED":
         print(f"  ERROR: Expected state OBSERVED, got {target_rt.get('current_state')}")
@@ -170,8 +225,19 @@ def main() -> None:
     opportunity_id  : """ + opportunity.opportunity_id + """
     trace_id        : """ + event.trace_id + """
 
-  MILESTONE 1 STATUS: PASS
-  Docker runtime verification: CONFIRMED LIVE
+  M1 DEMO RUN: PASS
+  Run type: """ + (
+        "FRESH ingestion — event accepted, RoadTwin created/updated by this run."
+        if fresh_ingest else
+        "IDEMPOTENT RE-RUN — this deterministic sensing pass was already ingested;"
+        " backend correctly returned duplicates (R4 §14.3 retry semantics)."
+    ) + """
+  Verified in THIS run against the live backend at """ + BACKEND_URL + """:
+    health check, opportunity ingestion, event ingestion,
+    idempotent re-submission, RoadTwin read model (OBSERVED).
+  Scope: SIMULATED sensing pass. Not real fleet data.
+  Runtime scope: whatever backend this script just contacted via HTTP —
+  the script does not verify the deployment mechanism behind it.
 """)
 
 

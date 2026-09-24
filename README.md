@@ -17,19 +17,22 @@ UrbanSense AI is an intelligent road condition monitoring system that uses senso
 ```
 BUS-001 [Edge Device]
   ├── GNSS / IMU sensors
-  ├── Camera (CAMERA-FRONT-01)
-  ├── HAL (hardware abstraction)
-  ├── Opportunity Evaluator     ← decides if sensing window is useful
-  ├── Object Detection (YOLO)   ← Milestone 2+
-  └── Event Builder → Canonical Event
+  ├── Camera (CAMERA-FRONT-01 / FileCameraProvider)
+  ├── HAL (hardware abstraction layer)
+  ├── Opportunity Evaluator     ← windowed sensing evaluation (Option A snapshot)
+  ├── Object Detection          ← Baseline Heuristic Detectors (BaseDetector interface)
+  ├── Same-Camera Tracking      ← SameCameraTracker (temporal IoU)
+  ├── Quality Evaluator         ← Optical frame & crop quality signals
+  ├── Evidence Store            ← Local crop storage (evidence://local/...)
+  └── Event Builder             ← Canonical Event with SHA-256 payload_hash
            │
            │ HTTP POST
            ▼
 BACKEND [FastAPI / PostgreSQL / PostGIS]
-  ├── POST /api/v1/events       ← Event ingestion (idempotent)
+  ├── POST /api/v1/events       ← Event ingestion (idempotent, type-gated)
   ├── POST /api/v1/opportunities ← Opportunity logging
   ├── Map Matcher               ← Backend-authoritative
-  ├── RoadTwin Engine           ← The ONLY RoadTwin implementation
+  ├── RoadTwin Engine           ← The ONLY RoadTwin implementation (OBSERVED state)
   │     └── roadtwin_states table
   └── GET /api/v1/roadtwin      ← Frontend read API
            │
@@ -45,10 +48,10 @@ DASHBOARD [React / Leaflet]
 
 | Milestone | Status | Notes |
 |-----------|--------|-------|
-| **M0: Foundation** | ✅ Complete | Docker, DB, infra, env |
-| **M1: First E2E Slice** | 🚧 In Progress | Simulated data, backend APIs, map |
-| M2: Real Detection | 📋 Planned | YOLO integration |
-| M3: Evidence Fusion | 📋 Planned | Multi-bus aggregation |
+| **M0: Foundation** | ✅ Complete | Docker, DB, PostGIS, MinIO, Redis, Mosquitto |
+| **M1: First E2E Slice** | ✅ Complete | Simulated sensing, backend APIs, map, OBSERVED RoadTwin |
+| **M2 / M2.1: Perception & Hardening** | ✅ Complete | Video HAL, baseline CV detectors, tracking, quality, windowed opportunity, evidence lineage, runtime verification |
+| M3: Evidence Fusion | 📋 Planned | Multi-bus aggregation, deduplication, lifecycle transitions |
 | M4: Full Lifecycle | 📋 Planned | 8-state RoadTwin |
 | M5: Production | 📋 Planned | RBAC, auth, scaling |
 
@@ -102,17 +105,18 @@ cd backend && alembic upgrade head && cd ..
 # 3. Start backend
 uvicorn backend.app.main:app --reload
 
-# 4. Run the demo
-python scripts/run_m1_demo.py
+# 4. Run the demos
+python scripts/run_m1_demo.py       # Milestone 1 simulated sensing demo
+python scripts/run_video_demo.py    # Milestone 2.1 video perception demo
 
 # 5. Start frontend
-cd frontend && npm install && npm run dev
+cd frontend && npm install && npm run build && npm run dev
 
 # 6. Open dashboard
 # http://localhost:5173
 
-# 7. Run tests
-pytest tests/test_m1.py -k "not integration" -v
+# 7. Run test suite
+pytest -v
 ```
 
 ---
@@ -121,11 +125,11 @@ pytest tests/test_m1.py -k "not integration" -v
 
 | Field | Owner | Description |
 |-------|-------|-------------|
-| `detector_confidence` | Edge | Raw model softmax output |
-| `observation_quality` | Edge | Derived from opportunity scores |
-| `gps_quality` | Edge | GPS fix quality |
-| `aggregate_confidence` | **Backend** | RoadTwin-level fusion |
-| `matched_road_segment_id` | **Backend** | Authoritative map-match |
+| `detector_confidence` | Edge | Heuristic detector baseline score (bounded [0.0, 1.0], DECISION-013; uncalibrated prototype score, not Bayesian probability or Softmax) |
+| `observation_quality` | Edge | Optical quality signals for the crop (sharpness, contrast, exposure) |
+| `gps_quality` | Edge | Normalized GNSS fix quality (0.0 when accuracy unavailable) |
+| `aggregate_confidence` | **Backend** | RoadTwin-level fusion score |
+| `matched_road_segment_id` | **Backend** | Authoritative map-match result |
 | `edge_road_segment_hint` | Edge | ADVISORY ONLY |
 
 > ⚠ NEVER create a field named just `confidence`. Always specify what kind.

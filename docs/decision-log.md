@@ -149,11 +149,13 @@ In Milestone 2 / 2.1, `detector_confidence` represents an **uncalibrated prototy
 
 **Status:** PROTOTYPE / CONFIGURABLE  
 **Milestone:** 2.1  
-**Question:** What is the authoritative sensing window duration for grouping consecutive camera frames under an `ObservationOpportunity`?  
-**Impact:** Frame-to-opportunity cardinality, edge event generation rate, and database record volume.  
+**Question:** What is the authoritative sensing window duration for grouping consecutive camera frames under an `ObservationOpportunity`, and how should multi-frame quality signals within the window be aggregated?  
+**Impact:** Frame-to-opportunity cardinality, edge event generation rate, database record volume, and opportunity validity stability.  
 **Owner:** Edge systems architecture team.  
 **Hardened Semantic Rule (M2.1):**  
-An `ObservationOpportunity` is a meaningful sensing window (default 1.0 second prototype window), NOT a 1:1 per-frame parent object. Multiple consecutive frames and detections within that window reference the same authoritative `opportunity_id`.
+An `ObservationOpportunity` is a meaningful sensing window (default 1.0 second prototype window), NOT a 1:1 per-frame parent object. Multiple consecutive frames and detections within that window reference the same authoritative `opportunity_id`.  
+**Snapshot Semantics (Option A):**  
+The active Opportunity's quality and validity score fields are a **snapshot** of conditions evaluated at the start of the window (first frame). Later frames within that 1.0s window reuse the existing window-start Opportunity context without mutating its scores. Frame-level optical variations continue to flow directly into each result's `quality_signals` and the crop's `observation_quality`. Full multi-frame temporal window score aggregation remains a future design consideration.
 
 ---
 
@@ -166,3 +168,67 @@ An `ObservationOpportunity` is a meaningful sensing window (default 1.0 second p
 **Owner:** Cloud Infrastructure team.  
 **Hardened Prototype Semantics (M2.1):**  
 Milestone 2.1 uses a local filesystem evidence store (`data/evidence/`) generating local URIs (`evidence://local/...`). Lineage is verified end-to-end (Observation → Event → Backend payload). Remote object synchronization to MinIO/S3 remains an open infrastructure integration.
+
+---
+
+## DECISION-016: Alembic Migration Logical Reference Alignment (No Foreign Keys on Logical Cross-References)
+
+**Status:** ADOPTED / RESOLVED  
+**Milestone:** 2.1  
+**Question:** Should the `events` table enforce hard SQL foreign-key constraints on `observation_id` and `opportunity_id`?  
+**Impact:** Order of ingestion, network decoupling, schema migrations.  
+**Owner:** Backend Architecture Team.  
+**Resolution:**  
+Removed foreign-key constraints on `events.observation_id` and `events.opportunity_id` in migration `m1_001_initial.py` to match the ORM model definition in `backend/app/models/event.py`.  
+Rationale:
+1. R4 §33.1 defines no edge observation ingestion REST endpoint; raw edge observations stay on the edge device and are not stored as rows in a backend `observations` table during routine event delivery.
+2. Under R4 §14.3, opportunities and events travel via independent network channels and may arrive out of order (e.g. event before opportunity). Enforcing a hard database foreign key on `events.opportunity_id` would reject legitimate edge events arriving before their opportunity record.
+3. Cross-references remain tracked as logical reference strings and indexed for fast lookup without blocking independent ingestion.
+
+---
+
+## DECISION-017: Deterministic ID Namespace Coexistence
+
+**Status:** DOCUMENTED  
+**Milestone:** 2.1  
+**Question:** The M1 simulator and M2 video perception pipeline both generate deterministic IDs using the sequence templates `EVT-000001`, `OPP-BUS-001-000001`, etc. Should they have segregated prefixes?  
+**Impact:** Potential event ID collisions if both M1 demo and M2 demo are run deterministically against the same backend without resetting the database.  
+**Owner:** QA / AI Systems team.  
+**Prototype Behaviour:**  
+Under R4 §14.3, backend event ingestion is strictly idempotent. When an event with `EVT-000001` is received again, the backend recognizes it and returns HTTP 200 with `status="duplicate"` without creating a duplicate record or corrupting state. For production test suites requiring fresh records, non-deterministic UUID generation or timestamp-based sensing pass prefixes are supported via the pipeline's `deterministic=False` argument.
+
+---
+
+## DECISION-018: GNSS Accuracy Semantic Guard
+
+**Status:** ADOPTED / PROTOTYPE GUARD  
+**Milestone:** 2.1  
+**Question:** How should the Opportunity Evaluator handle a GNSS sensor reading where `fix_quality > 0` but `accuracy_m is None`?  
+**Impact:** Geo-spatial reliability of opportunities and negative evidence calculation.  
+**Owner:** AI Systems & Edge Navigation Team.  
+**Hardened Semantic Rule (M2.1):**  
+A real GNSS fix without an accuracy estimate cannot be assumed to have high quality. In M2.1, when `accuracy_m is None`, `gps_quality_score` is explicitly assigned `0.0`, the opportunity is marked `INVALID`, and the reason `"GNSS accuracy unavailable"` is appended. Simulation mode continues to provide explicit simulated accuracy estimates (e.g., 3.5m). This is a prototype semantic guard to prevent silent quality fabrication.
+
+---
+
+## DECISION-019: Mathematical Performance Accounting Methodology
+
+**Status:** ADOPTED  
+**Milestone:** 2.1  
+**Question:** How should perception pipeline performance be accounted for and reported to prevent arithmetic inconsistencies and misleading throughput claims?  
+**Impact:** Performance transparency, benchmark credibility, profiling precision.  
+**Owner:** QA & AI Systems Architecture Team.  
+**Hardened Semantic Rule (M2.1):**  
+1. All component stages are measured using monotonic high-resolution wall-clock timers (`time.perf_counter()`):
+   - Frame acquisition (video decode + open)
+   - Optical quality evaluation
+   - Opportunity window evaluation
+   - Model inference
+   - Same-camera tracking
+   - Evidence cropping and event building
+2. Total execution time (`total_time_seconds`) is measured as the true end-to-end wall-clock duration of the run.
+3. Average end-to-end latency per frame is calculated as `(total_time_seconds * 1000.0) / frames_processed`.
+4. Processed throughput (`average_processed_fps`) is calculated as `1000.0 / avg_end_to_end_ms_per_frame` (frames processed per elapsed second). It is strictly reported as distinct from the source camera/video capture rate (e.g., 30 FPS).
+5. Residual overhead is calculated as `max(0.0, total_time_ms - sum(components))`, accounting for Python loop and scheduling overhead.
+6. The identity `sum(components) + residual == total` is guaranteed by construction and is explicitly documented as prototype CPU measurements, not embedded real-time performance.
+

@@ -118,8 +118,14 @@ def upgrade() -> None:
         sa.Column("map_match_confidence", sa.Float(), nullable=True),
         sa.Column("map_match_status", sa.String(), nullable=False, server_default="PENDING"),
         sa.Column("event_type", sa.String(), nullable=False),
-        sa.Column("observation_id", sa.String(), sa.ForeignKey("observations.observation_id"), nullable=True),
-        sa.Column("opportunity_id", sa.String(), sa.ForeignKey("observation_opportunities.opportunity_id"), nullable=True),
+        # Cross-references are ORDER-INDEPENDENT logical references, NOT hard database
+        # constraints (mirrors backend/app/models/event.py). R4 §33.1 defines no
+        # observation-ingestion API, so events may reference observation_ids that have
+        # no persisted row; opportunities travel on a separate endpoint and may arrive
+        # after their events (R4 §14.3 order-independent transport). Enforcing FKs here
+        # would reject the canonical edge → backend flow.
+        sa.Column("observation_id", sa.String(), nullable=True),
+        sa.Column("opportunity_id", sa.String(), nullable=True),
         sa.Column("evidence_ref", sa.String(), nullable=True),
         sa.Column("detector_confidence", sa.Float(), nullable=False),
         sa.Column("observation_quality", sa.Float(), nullable=True),
@@ -169,7 +175,6 @@ def upgrade() -> None:
     # ── Seed demo road segment (SEG-001) ─────────────────────────────────────
     # Required for PROTOTYPE map-match to resolve events to a segment.
     # DECISION_REQUIRED: replace with real road network import in production.
-    from datetime import datetime, timezone
     op.execute("""
         INSERT INTO road_segments (segment_id, name, road_name, city, country, centroid_lat, centroid_lon, created_at, notes)
         VALUES (

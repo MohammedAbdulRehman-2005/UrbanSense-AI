@@ -122,10 +122,15 @@ class OpportunityEvaluator:
             if hasattr(quality_signals, "occlusion_score"):
                 scores["occlusion_score"] = quality_signals.occlusion_score
 
-        # Incorporate actual GNSS fix quality if provided
-        if gnss is not None and gnss.accuracy_m is not None:
+        # Incorporate actual GNSS fix quality if provided.
+        # Do NOT fabricate quality: a real fix WITHOUT a reported accuracy estimate
+        # cannot inherit the simulated "good GPS" stub value.
+        if gnss is None:
+            scores["gps_quality_score"] = 0.0
+        elif gnss.accuracy_m is not None:
             scores["gps_quality_score"] = round(min(1.0, max(0.0, 1.0 - (gnss.accuracy_m / 10.0))), 4)
-        elif gnss is None:
+        else:
+            # Fix present but accuracy unreported -> quality unknown, cannot certify
             scores["gps_quality_score"] = 0.0
 
         if imu is None:
@@ -154,6 +159,13 @@ class OpportunityEvaluator:
             fov_valid = False
         elif not (gnss.fix_quality and gnss.fix_quality > 0):
             invalid_reasons.append("No valid GPS fix")
+            fov_valid = False
+        elif gnss.accuracy_m is None:
+            # Fix reported but accuracy estimate unavailable -> quality uncertifiable.
+            # PROTOTYPE semantic guard (not a production threshold): an Opportunity
+            # must not be VALID when its GPS quality cannot be assessed, because
+            # later negative-evidence gates require usable GPS/time alignment.
+            invalid_reasons.append("GNSS accuracy unavailable")
             fov_valid = False
 
         if imu is None:

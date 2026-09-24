@@ -236,6 +236,15 @@ class VideoPerceptionPipeline:
 
         # 2. Opportunity Window Evaluation (reusing/grouping over a meaningful window)
         # SENSING PASS -> OPPORTUNITY WINDOW -> MULTIPLE FRAMES
+        #
+        # PROTOTYPE WINDOW SEMANTICS (DECISION-014, documented in docs/decision-log.md):
+        # An active Opportunity's quality/score fields are a SNAPSHOT of the sensing
+        # conditions at the START of its window (first frame). Later frames in the
+        # same window reuse the window-start Opportunity context and do NOT mutate
+        # its scores (Option A semantics). Per-frame conditions still flow to
+        # per-frame outputs (quality_signals on this result; per-event crop
+        # observation_quality). Window-level score aggregation is a future
+        # DECISION_REQUIRED design question and is deliberately NOT implemented here.
         need_new_opportunity = (
             self._active_opportunity is None or
             frame.timestamp >= self._active_opportunity.window_end or
@@ -407,15 +416,45 @@ class VideoPerceptionPipeline:
         video_path: str,
         max_frames: Optional[int] = None,
         frame_step: int = 1,
+        base_timestamp: Optional[datetime] = None,
     ) -> List[ProcessedFrameResult]:
         """
         Process a recorded video file from end to end with rigorous performance accounting.
+
+        Performance accounting methodology (PROTOTYPE, wall-clock measured):
+        - total_time_seconds        : measured end-to-end wall-clock time of the run
+        - acquisition_time_ms       : measured video decode / frame-acquisition time
+        - *_time_ms (components)   : measured per-stage timings inside process_frame
+        - overhead_time_ms          : measured RESIDUAL = total - sum(components);
+                                      loop/iteration overhead only. It is NOT a
+                                      performance result by itself: a healthy run
+                                      has a small residual, proving the component
+                                      timers actually cover the work. Arithmetic
+                                      identity is guaranteed by construction and is
+                                      therefore never used as validation evidence.
+
+        NOT claimed as real-time / embedded / production performance.
         """
         results: List[ProcessedFrameResult] = []
         t0 = time.perf_counter()
 
-        with FileCameraProvider(video_path=video_path, camera_id=self.camera_id) as camera:
-            for frame in camera.frames(step=frame_step):
+        # One-time open/codec-negotiation cost is measured acquisition work —
+        # it must not silently inflate the residual "overhead" bucket.
+        # base_timestamp (optional) pins frame timestamps for reproducible runs.
+        t_open0 = time.perf_counter()
+        camera = FileCameraProvider(video_path=video_path, camera_id=self.camera_id, base_timestamp=base_timestamp)
+        self.metrics.acquisition_time_ms += (time.perf_counter() - t_open0) * 1000.0
+
+        with camera:
+            frame_iter = camera.frames(step=frame_step)
+            while True:
+                # Measure per-frame acquisition (video decode) explicitly.
+                t_acq0 = time.perf_counter()
+                frame = next(frame_iter, None)
+                self.metrics.acquisition_time_ms += (time.perf_counter() - t_acq0) * 1000.0
+                if frame is None:
+                    break
+
                 res = self.process_frame(frame)
                 results.append(res)
                 if max_frames and len(results) >= max_frames:
@@ -429,8 +468,11 @@ class VideoPerceptionPipeline:
             self.metrics.average_processed_fps = round(1000.0 / avg_e2e_ms, 2) if avg_e2e_ms > 0 else 0.0
             self.metrics.average_fps = self.metrics.average_processed_fps
 
-            # Calculate residual overhead (video decode, loop overhead, etc.)
+            # Residual overhead = total - sum(all measured components).
+            # By construction >= 0 (max() guard) and a small fraction in a
+            # healthy run; a large residual would indicate unmeasured work.
             sum_accounted_ms = (
+                self.metrics.acquisition_time_ms +
                 self.metrics.quality_eval_time_ms +
                 self.metrics.opportunity_eval_time_ms +
                 self.metrics.inference_time_ms +
