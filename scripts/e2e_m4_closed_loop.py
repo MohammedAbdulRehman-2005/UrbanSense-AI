@@ -99,7 +99,7 @@ def get(path: str) -> dict:
 
 # ── Event payload factory ────────────────────────────────────────────────────
 
-def event_payload(bus_id: str, confidence: float = 0.87, oq: float = 0.9, gq: float = 0.85) -> dict:
+def event_payload(bus_id: str, confidence: float = 0.87, oq: float = 0.9, gq: float = 0.85, opp_id: Optional[str] = None) -> dict:
     """Create a road defect event payload matched to SEG-001 (lat=17.4435, lon=78.3772)."""
     return {
         "event_id": str(uuid.uuid4()),
@@ -110,6 +110,7 @@ def event_payload(bus_id: str, confidence: float = 0.87, oq: float = 0.9, gq: fl
         "event_timestamp": datetime.now(timezone.utc).isoformat(),
         "location": {"latitude": 17.4435, "longitude": 78.3772},
         "event_type": "pothole_observation",
+        "opportunity_id": opp_id or f"OPP-{bus_id}-PASS1",
         "detector_confidence": confidence,
         "observation_quality": oq,
         "gps_quality": gq,
@@ -186,6 +187,22 @@ def main():
         _check("State is CONFIRMED after 3 buses", state == "CONFIRMED", f"state={state}")
 
     _ok("Final state before M4 maintenance", state)
+
+    # Verify positive-event evidence lineage and sensing_pass_id propagation
+    ev_list = get(f"/evidence?road_segment_id={seg_id}")
+    pos_evs = [e for e in ev_list if e.get("polarity") == "POSITIVE"]
+    _check("Positive evidence records exist", len(pos_evs) >= 2, f"count={len(pos_evs)}")
+    for pev in pos_evs:
+        _check(
+            f"Positive evidence {pev['evidence_id'][:8]} has sensing_pass_id",
+            pev.get("sensing_pass_id") is not None,
+            pev.get("sensing_pass_id"),
+        )
+        _check(
+            f"Positive evidence {pev['evidence_id'][:8]} has coordinates",
+            pev.get("latitude") is not None and pev.get("longitude") is not None,
+            f"lat={pev.get('latitude')}, lon={pev.get('longitude')}",
+        )
 
     # Step 2: MAINTENANCE_DISPATCHED (CONFIRMED → MAINTENANCE_PENDING)
     _hdr(2, "Dispatch Maintenance (CONFIRMED → MAINTENANCE_PENDING)")
@@ -327,6 +344,20 @@ def main():
     action_types = [h["action_type"] for h in history]
     _check("MAINTENANCE_DISPATCHED in history", "MAINTENANCE_DISPATCHED" in action_types)
     _check("REPAIR_COMPLETION_REPORTED in history", "REPAIR_COMPLETION_REPORTED" in action_types)
+    _check("START_VERIFICATION in history", "START_VERIFICATION" in action_types)
+
+    # Verify runtime visibility of REPAIR_REPORTED state in history
+    repair_rep_states = [
+        h for h in history
+        if h.get("resulting_roadtwin_state") == "REPAIR_REPORTED"
+        or h.get("prior_roadtwin_state") == "REPAIR_REPORTED"
+    ]
+    _check(
+        "REPAIR_REPORTED state visible in action history",
+        len(repair_rep_states) > 0,
+        f"records={len(repair_rep_states)}",
+    )
+
     for record in history:
         _ok("  Action", f"{record['action_type']} by {record['actor_role']} ({record['actor_id']}): "
             f"{record['prior_roadtwin_state']} -> {record['resulting_roadtwin_state']}")

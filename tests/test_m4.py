@@ -1044,3 +1044,44 @@ class TestM4HardeningValidation:
         assert ev.independence_class == IndependenceClass.CORRELATED.value
         # State must remain VERIFICATION_PENDING (not VERIFIED_REPAIRED)
         assert rt.current_state == "VERIFICATION_PENDING"
+
+    def test_positive_event_sensing_pass_id_propagation(self):
+        """Positive event opportunity_id/sensing_pass_id must propagate to EvidenceModel."""
+        from backend.app.fusion.engine import process_event_evidence
+
+        now = datetime.now(timezone.utc)
+        event = MagicMock()
+        event.event_id = "EVT-PASS-001"
+        event.bus_id = "BUS-P1"
+        event.device_id = "DEV-P1"
+        event.camera_id = "CAM-P1"
+        event.event_timestamp = now
+        event.latitude = 17.4435
+        event.longitude = 78.3772
+        event.opportunity_id = "OPP-PASS-001"
+        event.observation_id = "OBS-001"
+        event.map_match_status = "MATCHED"
+        event.detector_confidence = 0.85
+        event.observation_quality = 0.90
+        event.gps_quality = 0.95
+        event.trace_id = "tr-pass-001"
+
+        rt = MagicMock()
+        rt.road_segment_id = "SEG-PASS-001"
+        rt.current_state = "OBSERVED"
+        rt.previous_episode_id = None
+        rt.first_seen_at = now
+        rt.positive_evidence_count = 0
+
+        db = MagicMock()
+        db.query.return_value.filter_by.return_value.first.return_value = rt
+        db.query.return_value.filter_by.return_value.filter.return_value.all.return_value = []
+        db.add = MagicMock()
+        db.flush = MagicMock()
+
+        ev = process_event_evidence(db, event, "SEG-PASS-001")
+        assert ev is not None
+        assert ev.sensing_pass_id == "OPP-PASS-001"
+        assert ev.latitude == 17.4435
+        assert ev.longitude == 78.3772
+        assert ev.trace_id == "tr-pass-001"

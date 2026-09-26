@@ -237,16 +237,27 @@ def process_event_evidence(
     if rt_check and rt_check.previous_episode_id is not None and rt_check.first_seen_at is not None:
         since_ts = rt_check.first_seen_at
 
+    # Resolve sensing_pass_id: prefer linked opportunity sensing_pass_id, fall back to opportunity_id
+    pass_id = getattr(event, "opportunity_id", None)
+    if event.opportunity_id:
+        try:
+            from backend.app.models.opportunity import OpportunityModel
+            opp = db.query(OpportunityModel).filter_by(opportunity_id=event.opportunity_id).first()
+            if opp and getattr(opp, "sensing_pass_id", None) and isinstance(opp.sensing_pass_id, str):
+                pass_id = opp.sensing_pass_id
+        except Exception:
+            pass
+
     # Build IndependenceInput for this event
     candidate = IndependenceInput(
         event_id=event.event_id,
         bus_id=event.bus_id,
         device_id=event.device_id or "",
         camera_id=event.camera_id or "",
-        sensing_pass_id=event.opportunity_id,
+        sensing_pass_id=pass_id,
         event_timestamp_iso=event.event_timestamp.isoformat() if event.event_timestamp else "",
-        latitude=event.latitude or 0.0,
-        longitude=event.longitude or 0.0,
+        latitude=event.latitude,
+        longitude=event.longitude,
         observation_id=event.observation_id,
         opportunity_id=event.opportunity_id,
     )
@@ -310,7 +321,7 @@ def process_event_evidence(
         ingestion_timestamp=now,
         latitude=event.latitude,
         longitude=event.longitude,
-        sensing_pass_id=event.opportunity_id,
+        sensing_pass_id=pass_id,
         trace_id=event.trace_id,
         matched_road_segment_id=road_segment_id,
         map_match_status=event.map_match_status,

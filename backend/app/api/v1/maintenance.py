@@ -147,7 +147,10 @@ def report_completion(payload: ReportCompletionRequest, db: Session = Depends(ge
         raise HTTPException(status_code=422, detail=str(exc))
 
     now = datetime.now(timezone.utc)
-    action_record = AuthorityActionModel(
+    import uuid as _uuid
+
+    # 1. Contractor self-report action: MAINTENANCE_PENDING -> REPAIR_REPORTED
+    action_record_1 = AuthorityActionModel(
         action_id=action_id,
         road_segment_id=rt.road_segment_id,
         roadtwin_id=rt.roadtwin_id,
@@ -159,15 +162,33 @@ def report_completion(payload: ReportCompletionRequest, db: Session = Depends(ge
         scheduled_at=None,
         claimed_completion_at=claimed_at,
         prior_roadtwin_state=prior_state,
-        resulting_roadtwin_state=resulting_state,
+        resulting_roadtwin_state="REPAIR_REPORTED",
         trace_id=payload.trace_id,
         created_at=now,
     )
-    db.add(action_record)
+    db.add(action_record_1)
+
+    # 2. Immediate automatic trigger (Master Plan Table 13): REPAIR_REPORTED -> VERIFICATION_PENDING
+    action_record_2 = AuthorityActionModel(
+        action_id=str(_uuid.uuid4()),
+        road_segment_id=rt.road_segment_id,
+        roadtwin_id=rt.roadtwin_id,
+        action_type="START_VERIFICATION",
+        actor_role="SYSTEM",
+        actor_id="system-scheduler",
+        notes="Automatic transition to prioritized re-observation sensing window (Master Plan Table 13)",
+        scheduled_at=None,
+        claimed_completion_at=claimed_at,
+        prior_roadtwin_state="REPAIR_REPORTED",
+        resulting_roadtwin_state="VERIFICATION_PENDING",
+        trace_id=payload.trace_id,
+        created_at=now,
+    )
+    db.add(action_record_2)
     db.commit()
 
     logger.info(
-        "Repair completion reported: roadtwin=%s action=%s %s->%s actor=%s(%s)",
+        "Repair completion reported: roadtwin=%s action=%s %s->REPAIR_REPORTED->%s actor=%s(%s)",
         payload.roadtwin_id, action_id, prior_state, resulting_state,
         payload.actor_role, payload.actor_id,
     )
@@ -179,7 +200,7 @@ def report_completion(payload: ReportCompletionRequest, db: Session = Depends(ge
         prior_state=prior_state,
         new_state=resulting_state,
         message=(
-            f"Completion reported. RoadTwin transitioned {prior_state} → {resulting_state}. "
+            f"Completion reported. RoadTwin transitioned {prior_state} → REPAIR_REPORTED → {resulting_state}. "
             f"Awaiting independent verification evidence. "
             f"NOTE: This does not verify repair — independent sensing evidence is required."
         ),

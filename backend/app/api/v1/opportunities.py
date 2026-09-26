@@ -70,10 +70,17 @@ def ingest_opportunity(payload: OpportunityIngest, db: Session = Depends(get_db)
     )
     db.add(opp)
 
-    # Order-independence: if Event already arrived, link back
+    # Order-independence: if Event or Evidence already arrived, link back
     linked_events = db.query(EventModel).filter_by(opportunity_id=payload.opportunity_id).all()
     for ev in linked_events:
         logger.info(f"Back-linking event {ev.event_id} to opportunity {payload.opportunity_id}")
+
+    from backend.app.models.evidence import EvidenceModel
+    linked_evidence = db.query(EvidenceModel).filter_by(opportunity_id=payload.opportunity_id).all()
+    for ev_rec in linked_evidence:
+        if ev_rec.sensing_pass_id != payload.sensing_pass_id:
+            ev_rec.sensing_pass_id = payload.sensing_pass_id
+            logger.info(f"Back-linked evidence {ev_rec.evidence_id} to sensing_pass_id {payload.sensing_pass_id}")
 
     db.commit()
     logger.info(f"Opportunity accepted: opportunity_id={payload.opportunity_id}")

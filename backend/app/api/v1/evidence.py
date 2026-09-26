@@ -41,6 +41,10 @@ class EvidenceResponse(BaseModel):
     fusion_strategy: str
     fusion_version: str
     lineage: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    sensing_pass_id: Optional[str] = None
+    trace_id: Optional[str] = None
     created_at: Optional[datetime] = None
 
 
