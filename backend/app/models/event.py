@@ -55,6 +55,8 @@ class EventModel(Base):
     observation_id = Column(String, nullable=True, index=True)
     opportunity_id = Column(String, nullable=True, index=True)
     evidence_ref = Column(String, nullable=True)
+    track_id = Column(String, nullable=True, index=True)
+    telemetry_speed_kmh = Column(Float, nullable=True)
 
     # Quality dimensions — DISTINCT, never merge
     detector_confidence = Column(Float, nullable=False)

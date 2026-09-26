@@ -43,3 +43,45 @@ export interface HealthResponse {
   version: string;
   note: string;
 }
+
+export interface TrafficObservationResponse {
+  traffic_observation_id: string;
+  road_segment_id: string;
+  window_start: string;
+  window_end: string;
+  bus_id?: string | null;
+  device_id?: string | null;
+  camera_id?: string | null;
+  sensing_pass_id?: string | null;
+  vehicle_count: number;
+  vehicle_class_counts: Record<string, number>;
+  average_speed_kmh?: number | null;
+  density: number;
+  flow_rate: number;
+  congestion_state: 'NORMAL' | 'ELEVATED' | 'HIGH';
+  trace_id: string;
+  created_at?: string | null;
+  segment_name?: string | null;
+  centroid_lat?: number | null;
+  centroid_lon?: number | null;
+}
+
+export interface BottleneckResponse {
+  bottleneck_id: string;
+  road_segment_id: string;
+  status: 'ACTIVE' | 'RESOLVED' | string;
+  severity: string;
+  density_condition: string;
+  speed_condition: string;
+  qualifying_window_count: number;
+  required_window_count: number;
+  first_qualifying_window_start: string;
+  latest_qualifying_window_end: string;
+  evidence_window_ids: string[];
+  start_time: string;
+  resolved_at?: string | null;
+  segment_name?: string | null;
+  centroid_lat?: number | null;
+  centroid_lon?: number | null;
+}
+

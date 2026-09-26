@@ -31,3 +31,22 @@ export async function fetchRoadTwin(roadtwinId: string): Promise<RoadTwinRespons
   if (!resp.ok) throw new Error(`RoadTwin ${roadtwinId} not found: ${resp.status}`);
   return resp.json();
 }
+
+export async function fetchTraffic(roadSegmentId?: string): Promise<import('./types').TrafficObservationResponse[]> {
+  const url = roadSegmentId
+    ? `${API_BASE}/api/v1/traffic?road_segment_id=${encodeURIComponent(roadSegmentId)}`
+    : `${API_BASE}/api/v1/traffic`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Traffic fetch failed: ${resp.status}`);
+  return resp.json();
+}
+
+export async function fetchBottlenecks(roadSegmentId?: string, status: string = 'ACTIVE'): Promise<import('./types').BottleneckResponse[]> {
+  let url = `${API_BASE}/api/v1/bottlenecks?status=${encodeURIComponent(status)}`;
+  if (roadSegmentId) {
+    url += `&road_segment_id=${encodeURIComponent(roadSegmentId)}`;
+  }
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Bottleneck fetch failed: ${resp.status}`);
+  return resp.json();
+}

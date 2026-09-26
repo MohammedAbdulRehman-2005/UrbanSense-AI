@@ -342,3 +342,59 @@ GPS quality and FOV validity are **independent sensing dimensions** and must not
 1. In accordance with Master Plan Section 13, contractor self-reports trigger `REPAIR_REPORTED`, which immediately and automatically advances to `VERIFICATION_PENDING` to initiate prioritized re-observation. Both explicit `START_VERIFICATION` and atomic auto-transition paths are supported.  
 2. Recurrence is authoritatively proven and tracked via episode lineage (`active_episode_id`, `previous_episode_id`), not by an auxiliary integer count. A non-null `previous_episode_id` formally denotes a recurrent defect episode.
 
+---
+
+## DECISION-027: Traffic Window Duration and Deduplicated Vehicle Count Semantics
+
+**Status:** ADOPTED ARCHITECTURAL INVARIANT  
+**Milestone:** M5 Vertical Slice 1  
+**Question:** How should continuous vehicle sightings be aggregated into road segment traffic observations without double-counting multi-frame sightings of the same vehicle?  
+**Impact:** Prevents 30 FPS video detections of a single stationary or slow vehicle from artificially inflating segment traffic volume into thousands of phantom vehicles.  
+**Owner:** Traffic Intelligence & Perception Engineering.  
+**Resolution:**  
+1. Time-bucket aggregation utilizes a fixed UTC rolling window duration (`traffic_window_duration_seconds = 60s`), aligned deterministically to epoch second boundaries (`floor(epoch / 60) * 60`).  
+2. Within any single `(road_segment_id, window_start, window_end)` bucket, vehicle observations are deduplicated by `track_id`. A single physical vehicle (`track_id`) contributes at most one unit (`deduped_vehicle_count += 1`) to the window volume.  
+3. Sightings lacking a `track_id` default to conservative single-sighting increments. The database enforces uniqueness on `(road_segment_id, window_start)`.
+
+---
+
+## DECISION-028: Speed Derivation Strategy (Approach A — GPS Displacement)
+
+**Status:** ADOPTED ARCHITECTURAL INVARIANT  
+**Milestone:** M5 Vertical Slice 1  
+**Question:** How should vehicle speed be derived without calibrated optical extrinsic cameras?  
+**Impact:** Optical pixel-flow velocity without extrinsic road calibration and homography is physically invalid and prohibited.  
+**Owner:** AI Systems Architect & Sensor Validation.  
+**Resolution:**  
+1. Optical flow pixel motion is explicitly banned from being converted directly to physical speed (km/h) without extrinsic camera calibration.  
+2. Approach A is adopted: vehicle fleet speed is derived from consecutive physical GNSS/GPS coordinate displacement over elapsed time ($\Delta d / \Delta t$) via the Haversine formula, clamped to realistic operational speed limits (0–160 km/h).  
+3. Where explicit CAN-bus or vehicle telemetry speed (`telemetry_speed_kmh`) is supplied in the ingestion event, it takes precedence. Missing or uncomputable speeds remain `NULL` / `UNKNOWN` rather than fabricated values.
+
+---
+
+## DECISION-029: Density and Flow Prototype Formulations
+
+**Status:** ADOPTED ARCHITECTURAL INVARIANT  
+**Milestone:** M5 Vertical Slice 1  
+**Question:** How are road segment traffic density (veh/km) and hourly flow rate (veh/h) derived during the prototype stage?  
+**Impact:** Provides normalized traffic indicators across segments of differing lengths for congestion and bottleneck determination.  
+**Owner:** Data & Analytics Engineering.  
+**Resolution:**  
+1. Segment density is calculated as $\text{density} = (\text{deduped\_vehicle\_count} / \text{segment\_length\_km})$, where `segment_length_km` defaults to `traffic_default_segment_length_m / 1000` (0.5 km) if not explicitly provisioned in the road network GIS layer.  
+2. Equivalent hourly flow is computed by scaling window volume to an hourly rate: $\text{flow\_rate\_vph} = \text{deduped\_vehicle\_count} \times (3600 / \text{window\_duration\_seconds})$.  
+3. Congestion classification evaluates density thresholds (`FREE_FLOW` < 8 veh/km, `MODERATE` 8–15 veh/km, `HEAVY` > 15 veh/km, and `STOP_AND_GO` when heavy with speed < 10 km/h), documented as prototype heuristic thresholds subject to calibration in M6.
+
+---
+
+## DECISION-030: Rolling 3-Window Bottleneck Persistence Rule
+
+**Status:** ADOPTED ARCHITECTURAL INVARIANT  
+**Milestone:** M5 Vertical Slice 1  
+**Question:** What constitutes a persistent traffic bottleneck versus a transient traffic stoppage or red-light queue?  
+**Impact:** Prevents momentary transit bus stops or traffic signal cycles from triggering false municipal bottleneck alerts.  
+**Owner:** Principal AI Systems Architect.  
+**Resolution:**  
+1. A bottleneck is confirmed only when high segment density ($\ge 15.0$ veh/km) AND low fleet speed ($\le 20.0$ km/h) persist across 3 consecutive aggregation windows ($T-2, T-1, T$).  
+2. A single window or 2 consecutive windows are recorded as `MONITORING` and do not activate an active bottleneck. Any intervening window failing the condition immediately resets persistence.  
+3. Every bottleneck record carries complete explainability metadata (`consecutive_windows_count`, `trigger_density_veh_km`, `trigger_avg_speed_kmh`, and `persistence_history`), enabling transparent municipal auditability in the frontend GIS layer.
+

@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     map_match_prototype_confidence: float = 0.85
     map_match_hint_radius_m: float = 100.0
 
+    # Traffic Intelligence — Milestone 5 (PROPOSED / DECISION_REQUIRED)
+    traffic_window_duration_seconds: int = 60
+    traffic_high_density_threshold: float = 15.0      # veh/km (PROPOSED)
+    traffic_elevated_density_threshold: float = 8.0   # veh/km (PROPOSED)
+    traffic_low_speed_threshold_kmh: float = 20.0     # km/h (PROPOSED)
+    traffic_bottleneck_window_count: int = 3          # 3-window rolling condition (FROZEN by Master Plan)
+    traffic_default_segment_length_m: float = 500.0   # metres fallback if geom is null (PROPOSED)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

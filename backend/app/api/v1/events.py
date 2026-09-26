@@ -34,6 +34,16 @@ ROAD_DEFECT_EVENT_TYPES = {
     "pothole",
 }
 
+# Milestone 5: Vehicle events triggering traffic aggregation and bottleneck analysis
+VEHICLE_EVENT_TYPES = {
+    "vehicle_observation",
+    "car_observation",
+    "bus_observation",
+    "truck_observation",
+    "motorcycle_observation",
+    "bicycle_observation",
+}
+
 
 @router.post("/events", response_model=EventIngestResponse)
 def ingest_event(payload: EventIngest, db: Session = Depends(get_db)):
@@ -97,6 +107,8 @@ def ingest_event(payload: EventIngest, db: Session = Depends(get_db)):
         observation_id=payload.observation_id,
         opportunity_id=payload.opportunity_id,
         evidence_ref=payload.evidence_ref,
+        track_id=payload.track_id,
+        telemetry_speed_kmh=payload.telemetry_speed_kmh,
         detector_confidence=payload.detector_confidence,
         observation_quality=payload.observation_quality,
         gps_quality=payload.gps_quality,
@@ -154,9 +166,38 @@ def ingest_event(payload: EventIngest, db: Session = Depends(get_db)):
                 f"FusionEngine error for event_id={payload.event_id}: {exc}",
                 exc_info=True,
             )
+    elif payload.event_type in VEHICLE_EVENT_TYPES and match.matched_road_segment_id:
+        try:
+            from backend.app.traffic.aggregator import TrafficAggregator, get_window_bounds
+            from backend.app.traffic.bottleneck import BottleneckEngine
+            from backend.app.core.config import get_settings
+
+            settings = get_settings()
+            w_start, w_end = get_window_bounds(event.event_timestamp, settings.traffic_window_duration_seconds)
+
+            aggregator = TrafficAggregator()
+            aggregator.aggregate_window_from_events(
+                db=db,
+                road_segment_id=match.matched_road_segment_id,
+                window_start=w_start,
+                window_end=w_end,
+                trace_id=payload.trace_id,
+            )
+
+            bottleneck_engine = BottleneckEngine()
+            bottleneck_engine.evaluate_segment(
+                db=db,
+                road_segment_id=match.matched_road_segment_id,
+                as_of_time=w_end,
+            )
+        except Exception as exc:
+            logger.error(
+                f"Traffic aggregation error for event_id={payload.event_id}: {exc}",
+                exc_info=True,
+            )
     else:
         logger.info(
-            f"Event {payload.event_id} (type={payload.event_type}) persisted without road defect RoadTwin mutation."
+            f"Event {payload.event_id} (type={payload.event_type}) persisted without road defect or traffic mutation."
         )
 
 

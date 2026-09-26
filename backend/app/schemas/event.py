@@ -32,6 +32,8 @@ class EventIngest(BaseModel):
     observation_id: Optional[str] = None
     opportunity_id: Optional[str] = None
     evidence_ref: Optional[str] = None
+    track_id: Optional[str] = None
+    telemetry_speed_kmh: Optional[float] = None
     detector_confidence: float = Field(ge=0.0, le=1.0)
     observation_quality: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     gps_quality: Optional[float] = Field(default=None, ge=0.0, le=1.0)

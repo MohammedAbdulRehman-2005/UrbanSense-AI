@@ -34,6 +34,7 @@ class MapMatchResult:
 PROTOTYPE_ROAD_SEGMENTS = [
     {"segment_id": "SEG-001", "name": "HITEC City Main Road Seg 1", "centroid_lat": 17.4435, "centroid_lon": 78.3772},
     {"segment_id": "SEG-002", "name": "HITEC City Main Road Seg 2", "centroid_lat": 17.4440, "centroid_lon": 78.3780},
+    {"segment_id": "SEG-TRF-001", "name": "Gachibowli ORR Traffic Corridor", "centroid_lat": 17.4300, "centroid_lon": 78.3600},
 ]
 
 
