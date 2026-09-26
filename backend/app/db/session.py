@@ -1,4 +1,4 @@
-﻿"""
+"""
 UrbanSense AI — Database session management
 """
 from __future__ import annotations
@@ -24,7 +24,8 @@ def get_session_factory(engine=None):
     return sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
-SessionLocal = get_session_factory()
+engine = get_engine()
+SessionLocal = get_session_factory(engine)
 
 
 def get_db() -> Generator[Session, None, None]:

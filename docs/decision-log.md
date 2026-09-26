@@ -232,3 +232,113 @@ GPS quality and FOV validity are **independent sensing dimensions** and must not
    - Negative (magnitude > 1 ms): indicates timer overlap or measurement error. A `WARNING` log is emitted describing the component sum, measured total, and magnitude of discrepancy. This surfaces instrumentation bugs rather than silently concealing them with `max(0, ...)`.
 6. The pipeline does NOT guarantee `sum(components) + residual == total` when timers overlap. The discrepancy IS the signal.
 
+---
+
+## DECISION-020: Negative Evidence Gating and Strength Formulation
+
+**Status:** PROTOTYPE ADOPTED / DECISION_REQUIRED FOR PRODUCTION CALIBRATION  
+**Milestone:** 4  
+**Question:** How should negative sensing evidence (absence of detection during a valid sensing opportunity) be gated, formulated, and weighted to verify road defect repair?  
+**Impact:** Prevents poor camera passes, missing GPS fixes, or obstructed sensors from being falsely certified as repairs.  
+**Owner:** Sensor Fusion & QA Engineering Team.  
+**Hardened Semantic Rules (M4):**  
+1. **Strict Opportunity Gating:**  
+   - `VALID` opportunity + no defect observation → Candidate negative evidence (recorded with `polarity='NEGATIVE'`, `detector_confidence=None`).  
+   - `INVALID` opportunity + no observation → **INCONCLUSIVE** (strictly rejected; zero evidence recorded).  
+   - A poor-quality pass is NOT evidence of repair. A missing camera frame is NOT evidence of repair. A missing GPS fix is NOT evidence of repair.  
+2. **Strength Formulation (FusionEngine exclusive):**  
+   - `negative_evidence_strength = opportunity_score * gps_quality`.  
+   - Computed exclusively inside `backend/app/fusion/engine.py`.  
+   - `evidence_weight = 0.0` (does not dilute or contaminate positive Noisy-OR formula).  
+3. **Verification Transition Threshold:**  
+   - Prototype threshold: `negative_evidence_strength >= 0.5` triggers `VERIFICATION_PENDING → VERIFIED_REPAIRED`.  
+   - Explicitly marked `PROTOTYPE / UNCALIBRATED`: production deployment requires formal statistical field calibration.
+
+---
+
+## DECISION-021: Independent Verification Guarantee — Contractor Report Non-Equivalence
+
+**Status:** ADOPTED ARCHITECTURAL INVARIANT  
+**Milestone:** 4  
+**Question:** Does an authority dispatch or contractor self-report of completion certify defect repair?  
+**Impact:** Integrity of the UrbanSense closed-loop maintenance system; prevention of unverified municipal ticket closure.  
+**Owner:** Systems Architecture Team.  
+**Hardened Invariant (M4):**  
+1. Submitting `POST /api/v1/maintenance/report-completion` transitions RoadTwin from `MAINTENANCE_PENDING` to `VERIFICATION_PENDING`.  
+2. It **NEVER** transitions directly to `VERIFIED_REPAIRED`.  
+3. A RoadTwin reaches `VERIFIED_REPAIRED` only when subsequent, independent negative sensing evidence meets the verification threshold.  
+4. Authority action records are maintained append-only in `authority_actions` with full audit trace (`actor_role`, `actor_id`, `prior_roadtwin_state`, `resulting_roadtwin_state`, `trace_id`).
+
+---
+
+## DECISION-022: Defect Recurrence Episode Boundary & Evidence Isolation
+
+**Status:** ADOPTED ARCHITECTURAL INVARIANT  
+**Milestone:** 4  
+**Question:** When a new positive observation occurs on a previously `VERIFIED_REPAIRED` road segment, how is recurrence handled without leaking prior-episode evidence into the new lifecycle?  
+**Impact:** Avoids instantaneous false re-confirmation using historical observations from before the repair was executed.  
+**Owner:** Backend & Sensor Fusion Architecture Team.  
+**Hardened Invariant (M4):**  
+1. A new positive defect detection on a `VERIFIED_REPAIRED` segment transitions state to `REAPPEARED`.  
+2. A new `active_episode_id` is generated (UUID), and the prior episode ID is linked to `previous_episode_id`.  
+3. `positive_evidence_count` resets to 1, `negative_evidence_count` resets to 0, and `first_seen_at` is set to the recurrence event timestamp.  
+4. `FusionEngine` scopes evidence collection and Noisy-OR aggregation to `timestamp >= first_seen_at` for the active episode, strictly isolating pre-repair historical evidence.  
+5. A `REAPPEARED` defect is eligible for immediate maintenance re-dispatch (`REAPPEARED → MAINTENANCE_PENDING`).
+
+---
+
+## DECISION-023: Historical Evidence Lineage Persistence (Spatial/Temporal Grounding)
+
+**Status:** ADOPTED / RESOLVED  
+**Milestone:** M3/M4 Hardening  
+**Question:** Should historical evidence reconstruction rely on synthetic coordinates (`lat=0.0, lon=0.0`) and null pass IDs, or persist full spatio-temporal provenance?  
+**Impact:** Prevents 8,000 km Gulf-of-Guinea coordinate anomalies when evaluating same-bus spatial correlation across passes.  
+**Owner:** Backend Architecture & Fusion Team.  
+**Resolution:**  
+1. Added `latitude`, `longitude`, `sensing_pass_id`, and `trace_id` columns to `EvidenceModel` (migration `m4_002_evidence_lineage`).  
+2. Positive and negative evidence construction in `FusionEngine` strictly populates these fields.  
+3. `_load_existing_contributions()` reconstructs candidate history with genuine persisted coordinates and pass identifiers, enabling spatial proximity evaluation (`_SPATIAL_INDEPENDENCE_RADIUS_M = 50.0m`).  
+4. `IndependenceInput` tolerates `Optional[float]` coordinates gracefully, falling back to segment-level temporal correlation when physical coordinates are absent.
+
+---
+
+## DECISION-024: Negative Evidence Independence Classification & Verification Gating
+
+**Status:** ADOPTED ARCHITECTURAL INVARIANT  
+**Milestone:** M4 Hardening  
+**Question:** Should negative evidence passes automatically receive `independence_class=INDEPENDENT`, or undergo multi-pass independence classification?  
+**Impact:** Prevents rapid consecutive passes from the same vehicle or camera pass from being miscounted as independent negative verifications.  
+**Owner:** Sensor Fusion & Validation Engineering.  
+**Resolution:**  
+1. Candidate negative passes undergo formal independence classification via `classify_independence()`.  
+2. Repeated frames from the same vehicle within 300s / 50m are classified as `CORRELATED` or `DUPLICATE`.  
+3. Transition guard: Only negative evidence classified as `INDEPENDENT` with `negative_evidence_strength >= 0.5` can trigger `VERIFICATION_PENDING → VERIFIED_REPAIRED`. Correlated or duplicate negative passes are recorded for telemetry but cannot certify repair.
+
+---
+
+## DECISION-025: RoadTwin State Machine Ownership Enforcement
+
+**Status:** ADOPTED ARCHITECTURAL INVARIANT  
+**Milestone:** M4 Hardening  
+**Question:** Where in the system is `RoadTwinStateModel.current_state` permitted to be mutated?  
+**Impact:** Eliminates split-brain state machine logic and unauthorized mutations across subsystem boundaries.  
+**Owner:** Backend Systems Architecture.  
+**Resolution:**  
+1. Direct assignment `rt.current_state = new_state` outside `backend/app/roadtwin/engine.py` is strictly prohibited.  
+2. `FusionEngine` delegates evidence-driven state transitions to `apply_positive_evidence_transition(rt, new_state, reason)` in `roadtwin/engine.py`.  
+3. Negative evidence transitions are handled exclusively through `apply_negative_evidence_transition()`.  
+4. Authority maintenance transitions are handled exclusively through `apply_maintenance_action()`.
+
+---
+
+## DECISION-026: REPAIR_REPORTED Lifecycle Semantics & Authoritative Episode Lineage
+
+**Status:** ADOPTED ARCHITECTURAL INVARIANT  
+**Milestone:** M4 Hardening  
+**Question:** How are contractor completion reports represented in the lifecycle, and what is the authoritative source of truth for recurrence tracking?  
+**Impact:** Faithful compliance with Master Plan Section 13/20/22; avoidance of redundant recurrence counters.  
+**Owner:** Principal AI Systems Architect.  
+**Resolution:**  
+1. In accordance with Master Plan Section 13, contractor self-reports trigger `REPAIR_REPORTED`, which immediately and automatically advances to `VERIFICATION_PENDING` to initiate prioritized re-observation. Both explicit `START_VERIFICATION` and atomic auto-transition paths are supported.  
+2. Recurrence is authoritatively proven and tracked via episode lineage (`active_episode_id`, `previous_episode_id`), not by an auxiliary integer count. A non-null `previous_episode_id` formally denotes a recurrent defect episode.
+

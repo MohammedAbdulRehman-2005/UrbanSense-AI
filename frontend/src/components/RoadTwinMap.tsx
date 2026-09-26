@@ -20,13 +20,18 @@ import { fetchRoadTwins } from '../client/api';
 import 'leaflet/dist/leaflet.css';
 
 const STATE_COLORS: Record<string, string> = {
-  OBSERVED: '#f59e0b',      // amber — first observation
-  CANDIDATE: '#3b82f6',     // blue — multiple observations
-  CONFIRMED: '#ef4444',     // red — confirmed defect
-  ACTIVE: '#dc2626',        // dark red
-  UNDER_REPAIR: '#8b5cf6',  // purple
-  REPAIRED: '#10b981',      // green
-  CLOSED: '#6b7280',        // gray
+  OBSERVED: '#f59e0b',            // amber — first observation
+  CANDIDATE: '#3b82f6',           // blue — multiple observations
+  CONFIRMED: '#ef4444',           // red — confirmed defect
+  MAINTENANCE_PENDING: '#8b5cf6', // purple — maintenance dispatched
+  REPAIR_REPORTED: '#ec4899',     // pink — contractor reported completion
+  VERIFICATION_PENDING: '#6366f1',// indigo — awaiting negative sensing evidence
+  VERIFIED_REPAIRED: '#10b981',   // emerald green — verified by negative evidence
+  REAPPEARED: '#ea580c',          // deep orange — recurrent defect
+  ACTIVE: '#dc2626',              // dark red
+  UNDER_REPAIR: '#8b5cf6',        // legacy alias
+  REPAIRED: '#10b981',            // legacy alias
+  CLOSED: '#6b7280',              // gray
 };
 
 function stateColor(state: string): string {
@@ -67,7 +72,18 @@ function RoadTwinMarker({ rt }: { rt: RoadTwinResponse }) {
           <hr style={{ margin: '4px 0' }} />
           <b>Freshness:</b> {rt.freshness_status}
           <br />
+          <b>Maintenance:</b> {rt.maintenance_status}
+          <br />
           <b>Verification:</b> {rt.verification_status}
+          {rt.active_episode_id && (
+            <>
+              <br />
+              <b>Episode:</b> {rt.active_episode_id.substring(0, 8)}...
+              {rt.previous_episode_id && (
+                <span> (Prev: {rt.previous_episode_id.substring(0, 8)}...)</span>
+              )}
+            </>
+          )}
           <br />
           <hr style={{ margin: '4px 0' }} />
           <b>First seen:</b>{' '}
@@ -163,8 +179,28 @@ export function RoadTwinMap() {
               fontSize: '11px',
             }}
           >
-            PROTOTYPE / SIMULATED — Milestone 1
+            LIVE SYSTEM
           </span>
+          <a
+            href="/model_proof.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              marginLeft: '14px',
+              background: '#0284c7',
+              color: '#ffffff',
+              padding: '4px 10px',
+              borderRadius: '4px',
+              fontSize: '12px',
+              fontWeight: 600,
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <span>🤖 View AI Model Detections & Proof</span>
+          </a>
         </div>
         <div style={{ fontSize: '12px', color: '#94a3b8' }}>
           {loading ? '⟳ Loading...' : `${roadtwins.length} RoadTwin(s) · Refreshed: ${lastRefresh.toLocaleTimeString()}`}
@@ -255,7 +291,9 @@ export function RoadTwinMap() {
                 <th style={{ textAlign: 'left', padding: '4px 8px' }}>Segment</th>
                 <th style={{ textAlign: 'left', padding: '4px 8px' }}>State</th>
                 <th style={{ textAlign: 'left', padding: '4px 8px' }}>Confidence</th>
-                <th style={{ textAlign: 'left', padding: '4px 8px' }}>Evidence+</th>
+                <th style={{ textAlign: 'left', padding: '4px 8px' }}>Evidence (+/-)</th>
+                <th style={{ textAlign: 'left', padding: '4px 8px' }}>Maintenance</th>
+                <th style={{ textAlign: 'left', padding: '4px 8px' }}>Verification</th>
                 <th style={{ textAlign: 'left', padding: '4px 8px' }}>Last Event</th>
               </tr>
             </thead>
@@ -263,13 +301,19 @@ export function RoadTwinMap() {
               {roadtwins.map((rt) => (
                 <tr key={rt.roadtwin_id} style={{ borderTop: '1px solid #334155' }}>
                   <td style={{ padding: '4px 8px' }}>{rt.road_segment_id}</td>
-                  <td style={{ padding: '4px 8px', color: stateColor(rt.current_state) }}>
+                  <td style={{ padding: '4px 8px', color: stateColor(rt.current_state), fontWeight: 'bold' }}>
                     {rt.current_state}
                   </td>
                   <td style={{ padding: '4px 8px' }}>
                     {(rt.aggregate_confidence * 100).toFixed(1)}%
                   </td>
-                  <td style={{ padding: '4px 8px' }}>{rt.positive_evidence_count}</td>
+                  <td style={{ padding: '4px 8px' }}>
+                    <span style={{ color: '#10b981' }}>+{rt.positive_evidence_count}</span>
+                    {' / '}
+                    <span style={{ color: '#ef4444' }}>-{rt.negative_evidence_count}</span>
+                  </td>
+                  <td style={{ padding: '4px 8px' }}>{rt.maintenance_status}</td>
+                  <td style={{ padding: '4px 8px' }}>{rt.verification_status}</td>
                   <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '10px' }}>
                     {rt.last_event_id?.substring(0, 16) ?? 'N/A'}...
                   </td>

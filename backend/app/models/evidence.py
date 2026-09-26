@@ -41,6 +41,12 @@ class EvidenceModel(Base):
     # Spatial
     matched_road_segment_id = Column(String, nullable=True, index=True)
     map_match_status = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+
+    # Sensing pass / lineage
+    sensing_pass_id = Column(String, nullable=True, index=True)
+    trace_id = Column(String, nullable=True)
 
     # Quality signals (inputs to fusion formula)
     # evidence_weight = detector_confidence * observation_quality * gps_quality (MVP)

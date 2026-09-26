@@ -1,0 +1,19 @@
+# Backend API & Database
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+SQLAlchemy
+psycopg2-binary
+alembic
+GeoAlchemy2
+
+# Edge / Computer Vision / Scripts
+opencv-python
+numpy
+httpx
+torch
+ultralytics
+
+# Testing
+pytest

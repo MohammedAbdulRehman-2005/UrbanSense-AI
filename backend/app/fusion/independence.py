@@ -33,10 +33,10 @@ class IndependenceInput:
     bus_id: str
     device_id: str
     camera_id: str
-    sensing_pass_id: Optional[str]  # If available; None = unknown pass
-    event_timestamp_iso: str          # ISO 8601 string for comparison
-    latitude: float
-    longitude: float
+    sensing_pass_id: Optional[str] = None  # If available; None = unknown pass
+    event_timestamp_iso: str = ""          # ISO 8601 string for comparison
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     observation_id: Optional[str] = None
     opportunity_id: Optional[str] = None
 
@@ -138,16 +138,32 @@ class PrototypeIndependenceClassifier:
             if candidate.bus_id == prior.bus_id:
                 prior_ts = parse_ts(prior.event_timestamp_iso)
                 time_diff_s = abs((candidate_ts - prior_ts).total_seconds())
-                dist_m = _haversine_m(
-                    candidate.latitude, candidate.longitude,
-                    prior.latitude, prior.longitude,
-                )
-                if dist_m <= _SPATIAL_INDEPENDENCE_RADIUS_M and time_diff_s <= _TEMPORAL_INDEPENDENCE_WINDOW_S:
+
+                spatial_correlated = False
+                dist_m = None
+                if (
+                    candidate.latitude is not None
+                    and candidate.longitude is not None
+                    and prior.latitude is not None
+                    and prior.longitude is not None
+                ):
+                    dist_m = _haversine_m(
+                        candidate.latitude, candidate.longitude,
+                        prior.latitude, prior.longitude,
+                    )
+                    if dist_m <= _SPATIAL_INDEPENDENCE_RADIUS_M:
+                        spatial_correlated = True
+                else:
+                    # When coordinates are not available on one or both contributions, fall back to segment-level spatial correlation
+                    spatial_correlated = True
+
+                if spatial_correlated and time_diff_s <= _TEMPORAL_INDEPENDENCE_WINDOW_S:
+                    dist_str = f"spatial={dist_m:.1f}m < {_SPATIAL_INDEPENDENCE_RADIUS_M}m" if dist_m is not None else "spatial=segment-level"
                     return IndependenceResult(
                         independence_class=IndependenceClass.CORRELATED,
                         correlation_group_id=road_segment_id,
                         reason=(
-                            f"Same bus={candidate.bus_id}, spatial={dist_m:.1f}m < {_SPATIAL_INDEPENDENCE_RADIUS_M}m,"
+                            f"Same bus={candidate.bus_id}, {dist_str},"
                             f" time_diff={time_diff_s:.0f}s < {_TEMPORAL_INDEPENDENCE_WINDOW_S}s: CORRELATED (PROTOTYPE)"
                         ),
                     )

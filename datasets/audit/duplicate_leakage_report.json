@@ -1,0 +1,49 @@
+{
+  "exact_sha256_duplicates": {},
+  "exact_duplicate_sets": 0,
+  "perceptual_dhash_near_duplicates": [
+    {
+      "dhash": "f0e8f0f0f0f0e0f0",
+      "stems": [
+        "India_001964",
+        "India_000573"
+      ]
+    },
+    {
+      "dhash": "e08088e060e2f0e6",
+      "stems": [
+        "India_002318",
+        "India_008870"
+      ]
+    },
+    {
+      "dhash": "f0f0f0f0f0f2f1f0",
+      "stems": [
+        "India_003191",
+        "India_003989"
+      ]
+    },
+    {
+      "dhash": "c0c0f0f0f0f0f0f0",
+      "stems": [
+        "India_003967",
+        "India_008857"
+      ]
+    },
+    {
+      "dhash": "00000000e0608000",
+      "stems": [
+        "India_008592",
+        "India_009873"
+      ]
+    },
+    {
+      "dhash": "804080c0e0c00080",
+      "stems": [
+        "India_004420",
+        "India_006573"
+      ]
+    }
+  ],
+  "near_duplicate_sets": 6
+}

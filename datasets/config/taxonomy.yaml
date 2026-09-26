@@ -1,0 +1,87 @@
+# UrbanSense AI — RDD2022 India Dataset Taxonomy Configuration
+# ==============================================================
+# Master configuration file for taxonomy definition, class mapping,
+# and quarantine rules for the RDD2022 India dataset.
+#
+# Rules:
+#  - Every label transformation must be explicit and traceable.
+#  - The training preparation pipeline consumes this file directly.
+#  - Never silently remap or discard classes.
+
+version: "1.0"
+active_taxonomy: "Candidate_A_Full_RDD"
+
+taxonomies:
+  # Candidate A: Full 8-Class RDD2022 Taxonomy (Benchmark Alignment)
+  Candidate_A_Full_RDD:
+    name: "Full RDD2022 Road Damage Taxonomy"
+    description: "Preserves all 8 standard RDD2022 defect categories; corrects D0w0 typo to D00; quarantines non-standard D50."
+    classes:
+      0: "D00"  # Longitudinal Crack
+      1: "D01"  # Longitudinal Construction Joint
+      2: "D10"  # Transverse Crack
+      3: "D11"  # Transverse Construction Joint
+      4: "D20"  # Alligator Crack
+      5: "D40"  # Pothole / Other Corruption
+      6: "D43"  # Crosswalk Blur
+      7: "D44"  # White Line Blur
+
+    names:
+      0: "Longitudinal Crack"
+      1: "Longitudinal Construction Joint"
+      2: "Transverse Crack"
+      3: "Transverse Construction Joint"
+      4: "Alligator Crack"
+      5: "Pothole / Other Corruption"
+      6: "Crosswalk Blur"
+      7: "White Line Blur"
+
+    # Explicit label transformations
+    label_mapping:
+      D00: "D00"
+      D01: "D01"
+      D10: "D10"
+      D11: "D11"
+      D20: "D20"
+      D40: "D40"
+      D43: "D43"
+      D44: "D44"
+      D0w0: "D00"  # Verified typo for D00: vertical crack in wheelpath, aspect ratio 1.50
+
+    # Classes excluded from standard detection and isolated for audit
+    quarantine_classes:
+      - "D50"  # Non-standard RDD class (Manhole / Utility Cover; 28 instances)
+
+    ignored_classes: []
+
+  # Candidate B: UrbanSense Primary Defect Taxonomy (Operational RoadTwin Alignment)
+  Candidate_B_UrbanSense_Defect:
+    name: "UrbanSense RoadTwin Primary Defect Taxonomy"
+    description: "Consolidates road damage into 4 core municipal surface distress classes; merges construction joints into crack classes; quarantines surface markings (D43, D44) and D50."
+    classes:
+      0: "longitudinal_crack"  # D00 + D01 + D0w0
+      1: "transverse_crack"    # D10 + D11
+      2: "alligator_crack"     # D20
+      3: "pothole"             # D40
+
+    names:
+      0: "Longitudinal Crack & Joint"
+      1: "Transverse Crack & Joint"
+      2: "Alligator Crack"
+      3: "Pothole & Surface Damage"
+
+    label_mapping:
+      D00: "longitudinal_crack"
+      D01: "longitudinal_crack"
+      D0w0: "longitudinal_crack"
+      D10: "transverse_crack"
+      D11: "transverse_crack"
+      D20: "alligator_crack"
+      D40: "pothole"
+
+    quarantine_classes:
+      - "D50"  # Non-standard class (Manhole / Utility Cover)
+      - "D43"  # Crosswalk Blur (Surface marking; not structural road damage)
+      - "D44"  # White Line Blur (Lane marking; not structural road damage)
+
+    ignored_classes: []

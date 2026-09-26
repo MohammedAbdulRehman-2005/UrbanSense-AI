@@ -26,9 +26,20 @@ env/
 *.safetensors
 models/weights/
 edge/perception/checkpoints/
+backend/app/models/urbansense_runs/
+audit_output/
+output/
 
 # Datasets and generated/runtime data
-datasets/
+datasets/*
+!datasets/config/
+!datasets/config/**
+!datasets/audit/
+!datasets/audit/**
+datasets/India/
+datasets/cleaned/
+datasets/yolo/
+datasets/qa_samples/
 data/
 *.mp4
 *.avi

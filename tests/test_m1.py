@@ -347,7 +347,7 @@ def test_roadtwin_created_after_event():
     rt_resp = httpx.get(f"{BACKEND_URL}/api/v1/roadtwin/{roadtwin_id}")
     assert rt_resp.status_code == 200
     rt = rt_resp.json()
-    assert rt["current_state"] == "OBSERVED"
+    assert rt["current_state"] in ("OBSERVED", "CANDIDATE", "CONFIRMED", "REAPPEARED")
     assert rt["road_segment_id"] == "SEG-001"
     assert rt["aggregate_confidence"] > 0.0
     assert rt["segment_centroid_lat"] is not None

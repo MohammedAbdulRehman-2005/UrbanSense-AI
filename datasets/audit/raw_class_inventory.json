@@ -1,0 +1,153 @@
+{
+  "total_raw_objects": 8203,
+  "total_annotated_images": 3785,
+  "total_xml_files": 7706,
+  "classes": [
+    {
+      "class": "D40",
+      "object_count": 3187,
+      "image_count": 1530,
+      "object_percentage": 38.852,
+      "image_percentage": 40.423,
+      "first_seen_sample": "India_000005.xml",
+      "sample_files": [
+        "India_000005.xml",
+        "India_000017.xml",
+        "India_000017.xml",
+        "India_000017.xml",
+        "India_000017.xml"
+      ]
+    },
+    {
+      "class": "D20",
+      "object_count": 2021,
+      "image_count": 1758,
+      "object_percentage": 24.637,
+      "image_percentage": 46.446,
+      "first_seen_sample": "India_000014.xml",
+      "sample_files": [
+        "India_000014.xml",
+        "India_000014.xml",
+        "India_000024.xml",
+        "India_000027.xml",
+        "India_000028.xml"
+      ]
+    },
+    {
+      "class": "D00",
+      "object_count": 1555,
+      "image_count": 1109,
+      "object_percentage": 18.956,
+      "image_percentage": 29.3,
+      "first_seen_sample": "India_000011.xml",
+      "sample_files": [
+        "India_000011.xml",
+        "India_000038.xml",
+        "India_000052.xml",
+        "India_000052.xml",
+        "India_000053.xml"
+      ]
+    },
+    {
+      "class": "D44",
+      "object_count": 1062,
+      "image_count": 869,
+      "object_percentage": 12.946,
+      "image_percentage": 22.959,
+      "first_seen_sample": "India_000010.xml",
+      "sample_files": [
+        "India_000010.xml",
+        "India_000014.xml",
+        "India_000017.xml",
+        "India_000032.xml",
+        "India_000032.xml"
+      ]
+    },
+    {
+      "class": "D01",
+      "object_count": 179,
+      "image_count": 118,
+      "object_percentage": 2.182,
+      "image_percentage": 3.118,
+      "first_seen_sample": "India_000038.xml",
+      "sample_files": [
+        "India_000038.xml",
+        "India_000055.xml",
+        "India_000145.xml",
+        "India_000145.xml",
+        "India_000309.xml"
+      ]
+    },
+    {
+      "class": "D10",
+      "object_count": 68,
+      "image_count": 60,
+      "object_percentage": 0.829,
+      "image_percentage": 1.585,
+      "first_seen_sample": "India_000115.xml",
+      "sample_files": [
+        "India_000115.xml",
+        "India_000193.xml",
+        "India_000528.xml",
+        "India_000589.xml",
+        "India_000862.xml"
+      ]
+    },
+    {
+      "class": "D43",
+      "object_count": 57,
+      "image_count": 57,
+      "object_percentage": 0.695,
+      "image_percentage": 1.506,
+      "first_seen_sample": "India_000142.xml",
+      "sample_files": [
+        "India_000142.xml",
+        "India_000163.xml",
+        "India_000164.xml",
+        "India_000189.xml",
+        "India_000272.xml"
+      ]
+    },
+    {
+      "class": "D11",
+      "object_count": 45,
+      "image_count": 36,
+      "object_percentage": 0.549,
+      "image_percentage": 0.951,
+      "first_seen_sample": "India_000055.xml",
+      "sample_files": [
+        "India_000055.xml",
+        "India_000078.xml",
+        "India_000078.xml",
+        "India_000078.xml",
+        "India_000145.xml"
+      ]
+    },
+    {
+      "class": "D50",
+      "object_count": 28,
+      "image_count": 28,
+      "object_percentage": 0.341,
+      "image_percentage": 0.74,
+      "first_seen_sample": "India_000128.xml",
+      "sample_files": [
+        "India_000128.xml",
+        "India_000268.xml",
+        "India_000358.xml",
+        "India_000865.xml",
+        "India_000874.xml"
+      ]
+    },
+    {
+      "class": "D0w0",
+      "object_count": 1,
+      "image_count": 1,
+      "object_percentage": 0.012,
+      "image_percentage": 0.026,
+      "first_seen_sample": "India_006389.xml",
+      "sample_files": [
+        "India_006389.xml"
+      ]
+    }
+  ]
+}

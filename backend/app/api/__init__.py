@@ -1,1 +1,1 @@
-﻿# UrbanSense AI backend api
+# UrbanSense AI backend api
