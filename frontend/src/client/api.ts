@@ -10,7 +10,12 @@
  * PROTOTYPE / SIMULATED — Milestone 1 only.
  */
 
-import type { RoadTwinResponse, HealthResponse } from './types';
+import type {
+  RoadTwinResponse,
+  HealthResponse,
+  TrafficObservationResponse,
+  BottleneckResponse,
+} from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -32,21 +37,56 @@ export async function fetchRoadTwin(roadtwinId: string): Promise<RoadTwinRespons
   return resp.json();
 }
 
-export async function fetchTraffic(roadSegmentId?: string): Promise<import('./types').TrafficObservationResponse[]> {
-  const url = roadSegmentId
-    ? `${API_BASE}/api/v1/traffic?road_segment_id=${encodeURIComponent(roadSegmentId)}`
-    : `${API_BASE}/api/v1/traffic`;
+export interface TrafficQueryOptions {
+  roadSegmentId?: string;
+  startTime?: string;
+  endTime?: string;
+  limit?: number;
+}
+
+export async function fetchTraffic(
+  optionsOrSegmentId?: string | TrafficQueryOptions
+): Promise<TrafficObservationResponse[]> {
+  const params = new URLSearchParams();
+  if (typeof optionsOrSegmentId === 'string') {
+    params.set('road_segment_id', optionsOrSegmentId);
+  } else if (optionsOrSegmentId) {
+    if (optionsOrSegmentId.roadSegmentId) params.set('road_segment_id', optionsOrSegmentId.roadSegmentId);
+    if (optionsOrSegmentId.startTime) params.set('start_time', optionsOrSegmentId.startTime);
+    if (optionsOrSegmentId.endTime) params.set('end_time', optionsOrSegmentId.endTime);
+    if (optionsOrSegmentId.limit) params.set('limit', String(optionsOrSegmentId.limit));
+  }
+  const queryString = params.toString();
+  const url = queryString ? `${API_BASE}/api/v1/traffic?${queryString}` : `${API_BASE}/api/v1/traffic`;
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`Traffic fetch failed: ${resp.status}`);
   return resp.json();
 }
 
-export async function fetchBottlenecks(roadSegmentId?: string, status: string = 'ACTIVE'): Promise<import('./types').BottleneckResponse[]> {
-  let url = `${API_BASE}/api/v1/bottlenecks?status=${encodeURIComponent(status)}`;
-  if (roadSegmentId) {
-    url += `&road_segment_id=${encodeURIComponent(roadSegmentId)}`;
+export interface BottleneckQueryOptions {
+  roadSegmentId?: string;
+  status?: string;
+  limit?: number;
+}
+
+export async function fetchBottlenecks(
+  roadSegmentIdOrOptions?: string | BottleneckQueryOptions,
+  status: string = 'ACTIVE'
+): Promise<BottleneckResponse[]> {
+  const params = new URLSearchParams();
+  if (typeof roadSegmentIdOrOptions === 'string') {
+    if (status) params.set('status', status);
+    params.set('road_segment_id', roadSegmentIdOrOptions);
+  } else if (roadSegmentIdOrOptions) {
+    params.set('status', roadSegmentIdOrOptions.status || 'ACTIVE');
+    if (roadSegmentIdOrOptions.roadSegmentId) params.set('road_segment_id', roadSegmentIdOrOptions.roadSegmentId);
+    if (roadSegmentIdOrOptions.limit) params.set('limit', String(roadSegmentIdOrOptions.limit));
+  } else {
+    params.set('status', status);
   }
+  const url = `${API_BASE}/api/v1/bottlenecks?${params.toString()}`;
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`Bottleneck fetch failed: ${resp.status}`);
   return resp.json();
 }
+
