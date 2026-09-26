@@ -367,8 +367,12 @@ class VideoPerceptionPipeline:
             # Do NOT assemble georeferenced events with missing coordinates.
             if _gnss is not None:
                 self._evt_seq += 1
-                evt_id = f"EVT-{self._evt_seq:06d}" if self.deterministic else None
+                evt_id = f"EVT-{self.bus_id}-{self._evt_seq:06d}" if self.deterministic else None
                 event_type = f"{det.object_type}_observation"
+                telemetry_speed = (
+                    _gnss.get_speed_kmh() if hasattr(_gnss, "get_speed_kmh")
+                    else getattr(_gnss, "speed_kmh", None)
+                )
                 event = self.event_builder.build(
                     observation=observation,
                     opportunity=opportunity,
@@ -385,6 +389,8 @@ class VideoPerceptionPipeline:
                     evidence_ref=evidence_ref,
                     observation_quality=crop_quality.observation_quality,
                     event_id=evt_id,
+                    track_id=det.track_id,
+                    telemetry_speed_kmh=telemetry_speed,
                 )
                 events.append(event)
                 self.metrics.events_generated += 1
@@ -417,6 +423,8 @@ class VideoPerceptionPipeline:
         max_frames: Optional[int] = None,
         frame_step: int = 1,
         base_timestamp: Optional[datetime] = None,
+        edge_road_segment_hint: Optional[str] = "SEG-001-HINT",
+        gnss: Optional[GNSSReading] = None,
     ) -> List[ProcessedFrameResult]:
         """
         Process a recorded video file from end to end with rigorous performance accounting.
@@ -455,7 +463,11 @@ class VideoPerceptionPipeline:
                 if frame is None:
                     break
 
-                res = self.process_frame(frame)
+                res = self.process_frame(
+                    frame,
+                    gnss=gnss,
+                    edge_road_segment_hint=edge_road_segment_hint,
+                )
                 results.append(res)
                 if max_frames and len(results) >= max_frames:
                     break

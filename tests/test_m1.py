@@ -287,6 +287,30 @@ def _backend_available() -> bool:
         return False
 
 
+@pytest.fixture(autouse=True)
+def isolate_m1_segment(request):
+    """
+    Ensure M1 integration tests run in an isolated environment on SEG-001.
+    If SEG-001 was left in an advanced M4 lifecycle state (MAINTENANCE_PENDING,
+    REPAIR_REPORTED, VERIFICATION_PENDING, VERIFIED_REPAIRED) by previous runs,
+    resets it so M1 tests evaluate pure M1 semantics (OBSERVED/CANDIDATE/CONFIRMED).
+    """
+    if "integration" in request.keywords and _backend_available():
+        from backend.app.db.session import SessionLocal
+        from backend.app.models.roadtwin import RoadTwinStateModel
+        with SessionLocal() as db:
+            rt = db.query(RoadTwinStateModel).filter_by(road_segment_id="SEG-001").first()
+            if rt is not None and rt.current_state in (
+                "MAINTENANCE_PENDING",
+                "REPAIR_REPORTED",
+                "VERIFICATION_PENDING",
+                "VERIFIED_REPAIRED",
+            ):
+                db.delete(rt)
+                db.commit()
+    yield
+
+
 @pytest.mark.integration
 def test_backend_health():
     """TEST 9: Backend health check succeeds."""

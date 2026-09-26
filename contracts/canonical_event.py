@@ -140,6 +140,14 @@ class CanonicalEvent(BaseModel):
         default=None,
         description="Reference to evidence artifact (MinIO/GCS key). Optional.",
     )
+    track_id: Optional[str] = Field(
+        default=None,
+        description="Multi-frame track identifier from Edge tracker. Optional.",
+    )
+    telemetry_speed_kmh: Optional[float] = Field(
+        default=None,
+        description="Explicit vehicle telemetry / CAN-bus speed in km/h if available. Optional.",
+    )
 
     # --- Quality dimensions (DISTINCT — never merge into one "confidence") ---
     detector_confidence: float = Field(

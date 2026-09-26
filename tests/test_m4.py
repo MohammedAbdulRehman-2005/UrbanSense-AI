@@ -969,6 +969,22 @@ class TestMaintenanceAPIIntegration:
             f"Expected 422 for dispatch from non-confirmed state, got {resp.status_code}: {resp.text}"
         )
 
+        # Cleanup: cycle out of MAINTENANCE_PENDING so subsequent test suites don't inherit locked state
+        try:
+            httpx.post(f"{BACKEND_URL}/api/v1/maintenance/report-completion", json={
+                "roadtwin_id": rt_id, "actor_role": "CONTRACTOR", "actor_id": "CON-CLEAN",
+                "trace_id": str(uuid.uuid4()),
+            }, timeout=10)
+            httpx.post(f"{BACKEND_URL}/api/v1/maintenance/negative-evidence", json={
+                "road_segment_id": rts[0]["road_segment_id"], "opportunity_id": str(uuid.uuid4()),
+                "opportunity_score": 0.95, "gps_quality": 0.95, "bus_id": "BUS-CLEAN",
+                "timestamp": datetime.now(timezone.utc).isoformat(), "validity_status": "VALID",
+                "trace_id": str(uuid.uuid4()),
+            }, timeout=10)
+            httpx.post(f"{BACKEND_URL}/api/v1/events", json=_event_payload("BUS-CLEAN-REAP"), timeout=10)
+        except Exception:
+            pass
+
 
 # ---------------------------------------------------------------------------
 # M4.10 — Corrective Hardening Tests (Evidence Lineage, Negative Independence, Ownership)

@@ -75,6 +75,8 @@ class EventBuilder:
         evidence_ref: Optional[str] = None,
         observation_quality: Optional[float] = None,
         event_id: Optional[str] = None,
+        track_id: Optional[str] = None,
+        telemetry_speed_kmh: Optional[float] = None,
     ) -> CanonicalEvent:
         """
         Build a CanonicalEvent. Backend-owned fields are intentionally left unset.
@@ -92,6 +94,8 @@ class EventBuilder:
         _trace_id = trace_id or opportunity.trace_id or (
             f"TRACE-{self.bus_id}-{self._sequence:06d}" if self.deterministic else str(uuid.uuid4())
         )
+
+        _track_id = track_id if track_id is not None else observation.track_id
 
         location = Location(
             latitude=latitude,
@@ -121,6 +125,9 @@ class EventBuilder:
                 "longitude": longitude,
             },
         }
+        if _track_id is not None:
+            payload_for_hash["track_id"] = _track_id
+
         payload_hash = hashlib.sha256(
             json.dumps(payload_for_hash, sort_keys=True).encode()
         ).hexdigest()
@@ -142,6 +149,8 @@ class EventBuilder:
             observation_id=observation.observation_id,
             opportunity_id=opportunity.opportunity_id,
             evidence_ref=evidence_ref,
+            track_id=_track_id,
+            telemetry_speed_kmh=telemetry_speed_kmh,
             detector_confidence=observation.detector_confidence,
             observation_quality=observation_quality if observation_quality is not None else opportunity.opportunity_score,
             gps_quality=gps_quality,

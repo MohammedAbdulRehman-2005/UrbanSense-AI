@@ -29,6 +29,16 @@ class GNSSReading:
     heading_deg: Optional[float]   # Vehicle heading
     timestamp: datetime
     fix_quality: int               # 0=invalid, 1=GPS, 2=DGPS, 4=RTK
+    speed_mps: Optional[float] = None    # Speed in metres per second from GNSS
+    speed_kmh: Optional[float] = None    # Explicit telemetry / CAN / GNSS speed in km/h
+
+    def get_speed_kmh(self) -> Optional[float]:
+        """Return speed in km/h if available from speed_kmh or speed_mps."""
+        if self.speed_kmh is not None:
+            return self.speed_kmh
+        if self.speed_mps is not None:
+            return round(self.speed_mps * 3.6, 2)
+        return None
 
 
 @dataclass
