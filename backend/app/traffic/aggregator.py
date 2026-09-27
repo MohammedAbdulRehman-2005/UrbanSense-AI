@@ -214,6 +214,26 @@ class TrafficAggregator:
         camera_ids: Set[str] = set()
         sensing_pass_ids: Set[str] = set()
 
+        # Resolve authoritative sensing_pass_ids via linked OpportunityModel
+        opp_ids = {ev.opportunity_id for ev in events if getattr(ev, "opportunity_id", None)}
+        opp_to_pass: Dict[str, str] = {}
+        if opp_ids:
+            try:
+                from backend.app.models.opportunity import OpportunityModel
+                opp_records = (
+                    db.query(OpportunityModel)
+                    .filter(OpportunityModel.opportunity_id.in_(opp_ids))
+                    .all()
+                )
+                if opp_records and isinstance(opp_records, list):
+                    for o in opp_records:
+                        o_id = getattr(o, "opportunity_id", None)
+                        p_id = getattr(o, "sensing_pass_id", None)
+                        if isinstance(o_id, str) and isinstance(p_id, str):
+                            opp_to_pass[o_id] = p_id
+            except Exception as exc:
+                logger.debug("Could not resolve sensing_pass_id from OpportunityModel: %s", exc)
+
         for ev in events:
             # Lineage tracking
             if ev.bus_id:
@@ -222,8 +242,12 @@ class TrafficAggregator:
                 device_ids.add(ev.device_id)
             if ev.camera_id:
                 camera_ids.add(ev.camera_id)
-            if ev.opportunity_id:
-                sensing_pass_ids.add(ev.opportunity_id)
+
+            ev_pass = getattr(ev, "sensing_pass_id", None)
+            if isinstance(ev_pass, str):
+                sensing_pass_ids.add(ev_pass)
+            elif ev.opportunity_id and ev.opportunity_id in opp_to_pass:
+                sensing_pass_ids.add(opp_to_pass[ev.opportunity_id])
 
             # GPS tracking for speed derivation
             if ev.latitude is not None and ev.longitude is not None and ev.event_timestamp is not None:

@@ -241,6 +241,44 @@ class TestTrackingAndCountingSemantics:
         assert result.vehicle_class_counts["motorcycle"] == 1
         assert result.vehicle_class_counts["bicycle"] == 1
 
+    def test_sensing_pass_id_resolved_from_opportunity_model_not_opportunity_id(self):
+        """Lineage audit: TrafficAggregator resolves true sensing_pass_id from OpportunityModel, never uses opportunity_id directly."""
+        from backend.app.models.opportunity import OpportunityModel
+        t_start = datetime(2026, 9, 26, 12, 0, 0, tzinfo=timezone.utc)
+        t_end = t_start + timedelta(seconds=60)
+
+        ev = MagicMock()
+        ev.event_id = "EV-01"
+        ev.track_id = "TRK-01"
+        ev.event_type = "car_observation"
+        ev.event_timestamp = t_start + timedelta(seconds=10)
+        ev.latitude = 17.4300
+        ev.longitude = 78.3600
+        ev.telemetry_speed_kmh = None
+        ev.bus_id = "BUS-01"
+        ev.device_id = "DEV-01"
+        ev.camera_id = "CAM-01"
+        ev.opportunity_id = "OPP-999"
+        ev.sensing_pass_id = None
+
+        opp = MagicMock(spec=OpportunityModel)
+        opp.opportunity_id = "OPP-999"
+        opp.sensing_pass_id = "PASS-AUTH-777"
+
+        db = MagicMock()
+        # Mock event query
+        db.query.return_value.filter_by.return_value.filter.return_value.filter.return_value.filter.return_value.order_by.return_value.all.return_value = [ev]
+        # Mock opportunity query
+        db.query.return_value.filter.return_value.all.return_value = [opp]
+        db.query.return_value.filter_by.return_value.first.return_value = None
+
+        aggregator = TrafficAggregator()
+        result = aggregator.aggregate_window_from_events(db, "SEG-TRF-001", t_start, t_end)
+
+        # sensing_pass_id must be the authoritative pass ID, NOT the opportunity ID
+        assert result.sensing_pass_id == "PASS-AUTH-777"
+        assert result.sensing_pass_id != "OPP-999"
+
 
 # ─── 3. Segment Association Tests ─────────────────────────────────────────────
 
